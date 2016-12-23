@@ -137,3 +137,10 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+
+# Ignore input and output data
+input/*
+output/*
+!input/README.md
+!output/README.md
