@@ -1,12 +1,13 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from song import read_all_inputs
+from song import read_all_inputs, Song
+import sys
+import subprocess
+import os
 
 
-
-
-if __name__ == "__main__":
+def plot_input_graphs():
     songs = read_all_inputs()
     
     plt.hist([s.bar_length for s in songs], bins=range(2,9))
@@ -26,11 +27,12 @@ if __name__ == "__main__":
     plt.hist([len(s.instruments) for s in songs], bins=range(1,16))
     plt.title("Number of Instruments")
     plt.show()
-    plt.hist(list(np.array([s.instruments for s in songs]).flat), bins="auto")
+    inst = []
+    for s in songs:
+        for i in s.instruments:
+            inst.append(i)
+    plt.hist(inst, bins=range(-10,128))
     plt.title("Instruments")
-    plt.show()
-    plt.hist(list(np.array([len(s.tracks) for s in songs]).flat), bins="auto")
-    plt.title("Tracks")
     plt.show()
 
     notes = []
@@ -70,6 +72,10 @@ if __name__ == "__main__":
     plt.hist(notes_vel, bins=range(0,130,5))
     plt.title("Note Velocity")
     plt.show()
+    
+    plt.hist(list(np.array([len(s.tracks) for s in songs]).flat), bins="auto")
+    plt.title("Tracks")
+    plt.show()
 
     tracks_len = []
     for s in songs:
@@ -77,7 +83,7 @@ if __name__ == "__main__":
             t_len = 0
             for n in t:
                 t_len += n[-1]
-            tracks_len.append(t_len/(t[-1][0]+t[-1][-1])*100)
+            tracks_len.append(float(t_len)/float(s.length)*100)
     plt.hist(tracks_len, bins=range(0, 400, 10))
     plt.title("Track Lengths (%)")
     plt.show()
@@ -101,6 +107,21 @@ if __name__ == "__main__":
     plt.hist(tracks_max_width, bins=range(0,30))
     plt.title("Track Max Width")
     plt.show()
+
+
+def test_file_generation():
+    s = Song("input/wewishu.csv")
+    s.cleanup()
+    s.save_to_file()
+    subprocess.run([".\output\Csvmidi.exe", ".\output\wewishu.csv", ".\output\wewishu.mid"], shell=True)
+    os.startfile(".\output\wewishu.mid")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test_file_generation()
+    else:
+        plot_input_graphs()
 
 
 

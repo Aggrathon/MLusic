@@ -4,6 +4,7 @@ from math import log2
 
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
+PERCUSSION_INSTRUMENT = -10
 
 
 class Song(object):
@@ -15,6 +16,7 @@ class Song(object):
     instruments = []
     track_instrument = []
     tracks = []
+    length = 0
 
 
     def __init__(self, file_name):
@@ -26,7 +28,9 @@ class Song(object):
         self.track_instrument = []
         track_key = dict()
         instrument_key = dict()
+        instrument_key[10] = PERCUSSION_INSTRUMENT
         self.tracks = []
+        self.length = 1
 
         for line in lines:
             split = line.split(", ")
@@ -68,8 +72,14 @@ class Song(object):
             instrument_key[channel] = self.instruments.index(instrument)
         for key, track in track_key.items():
             if len(track) > 0:
-                self.track_instrument.append(int(instrument_key.get(key&255, 0)))
+                try:
+                    self.track_instrument.append(instrument_key[key&255])
+                except KeyError:
+                    self.track_instrument.append(instrument_key.get(10, 0))
                 self.tracks.append(track)
+                length = track[-1][0]+track[-1][-1]+1
+                if self.length < length:
+                    self.length = length
 
         file.close()
 
@@ -87,7 +97,8 @@ class Song(object):
         file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit)) ))
         file.write("1, 0, Tempo, {}\n".format(self.tempo))
         for i, ins in enumerate(self.instruments):
-            file.write("1, 0, Program_c, {}, {}\n".format(i, ins))
+            if ins != PERCUSSION_INSTRUMENT:
+                file.write("1, 0, Program_c, {}, {}\n".format(i, ins))
         file.write("1, 0, End_track\n")
         for i, track in enumerate(self.tracks):
             track_nr = i+2
@@ -102,6 +113,36 @@ class Song(object):
             file.write("{}, {}, End_track\n".format(track_nr, notes[-1][0]+1))
         file.write("0, 0, End_of_file\n")
         file.close()
+
+    def cleanup(self, piano_only=True):
+        #Remove percussion
+        self.tracks = [t for i, t in enumerate(self.tracks) if \
+            self.instruments[self.track_instrument[i]] < 97 and \
+            self.instruments[self.track_instrument[i]] != PERCUSSION_INSTRUMENT]
+        #Remove short notes and tracks
+        for i, track in enumerate(self.tracks):
+            coverage = 0
+            for t in track:
+                coverage += t[-1]
+            if float(coverage)/float(self.length) < 0.2:
+                self.tracks[i] = []
+                break
+            self.tracks[i] = [t for t in track if \
+                t[2] > 0 and t[3] > 0 and  \
+                self.ticks_per_quarter / t[3] * 4 < 33]
+        #Remove empty tracks
+        self.tracks = [t for t in self.tracks if len(t) > 0]
+        #Decrease the resolution to 1/64 notes
+        for track in self.tracks:
+            for t in track:
+                t[0] = round(t[0]*16/self.ticks_per_quarter)
+                t[-1] = round(t[-1]*16/self.ticks_per_quarter)
+        self.ticks_per_quarter = 16
+        self.length = round(self.length*16/self.ticks_per_quarter)
+        #Optionally remove instruments
+        if piano_only:
+            self.instruments = [0]
+            self.track_instrument = [0] * len(self.tracks)
 
 
 def read_all_inputs():
