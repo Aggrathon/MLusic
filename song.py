@@ -1,4 +1,6 @@
+
 import os
+from math import log2
 
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
@@ -80,7 +82,25 @@ class Song(object):
         if file_name is None:
             file_name = OUTPUT_FOLDER+self.name+".csv"
         file = open(file_name, "w")
-        #generate csv
+        file.write("0, 0, Header, 1, {}, {}\n".format(len(self.tracks), self.ticks_per_quarter))
+        file.write("1, 0, Start_track\n")
+        file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit)) ))
+        file.write("1, 0, Tempo, {}\n".format(self.tempo))
+        for i, ins in enumerate(self.instruments):
+            file.write("1, 0, Program_c, {}, {}\n".format(i, ins))
+        file.write("1, 0, End_track\n")
+        for i, track in enumerate(self.tracks):
+            track_nr = i+2
+            file.write("{}, 0, Start_track\n".format(track_nr))
+            notes = []
+            for note in track:
+                notes.append((note[0], "{}, {}, Note_on_c, {}, {}, {}\n".format(track_nr, note[0], self.track_instrument[i], note[1], note[2])))
+                notes.append((note[0]+note[-1], "{}, {}, Note_off_c, {}, {}, 0\n".format(track_nr, note[0]+note[-1], self.track_instrument[i], note[1])))
+            notes.sort()
+            for _, line in notes:
+                file.write(line)
+            file.write("{}, {}, End_track\n".format(track_nr, notes[-1][0]+1))
+        file.write("0, 0, End_of_file\n")
         file.close()
 
 
