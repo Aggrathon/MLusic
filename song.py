@@ -1,6 +1,7 @@
 
 import os
 from math import log2
+from collections import Counter
 
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
@@ -72,14 +73,15 @@ class Song(object):
             instrument_key[channel] = self.instruments.index(instrument)
         for key, track in track_key.items():
             if len(track) > 0:
-                try:
-                    self.track_instrument.append(instrument_key[key&255])
-                except KeyError:
-                    self.track_instrument.append(instrument_key.get(10, 0))
-                self.tracks.append(track)
                 length = track[-1][0]+track[-1][-1]+1
-                if self.length < length:
-                    self.length = length
+                if length > 0:
+                    try:
+                        self.track_instrument.append(instrument_key[key&255])
+                    except KeyError:
+                        self.track_instrument.append(instrument_key.get(10, 0))
+                    self.tracks.append(track)
+                    if self.length < length:
+                        self.length = length
 
         file.close()
 
@@ -114,35 +116,66 @@ class Song(object):
         file.write("0, 0, End_of_file\n")
         file.close()
 
-    def cleanup(self, piano_only=True):
+    def cleanup(self, piano_only=True, smallest_note = 8):
         #Remove percussion
         self.tracks = [t for i, t in enumerate(self.tracks) if \
             self.instruments[self.track_instrument[i]] < 97 and \
             self.instruments[self.track_instrument[i]] != PERCUSSION_INSTRUMENT]
         #Remove short notes and tracks
-        for i, track in enumerate(self.tracks):
-            coverage = 0
-            for t in track:
-                coverage += t[-1]
-            if float(coverage)/float(self.length) < 0.2:
-                self.tracks[i] = []
-                break
-            self.tracks[i] = [t for t in track if \
+        for track in self.tracks:
+            track = [t for t in track if \
                 t[2] > 0 and t[3] > 0 and  \
-                self.ticks_per_quarter / t[3] * 4 < 33]
+                int(self.ticks_per_quarter / t[3] * 4) <= smallest_note]
+            conc_over_sound, conc_over_length = __track_concurrency__(track)
+            if conc_over_sound < 0.3 or conc_over_length < 0.3:
+                track.clear()
         #Remove empty tracks
         self.tracks = [t for t in self.tracks if len(t) > 0]
-        #Decrease the resolution to 1/64 notes
+        #Decrease the resolution to 1/(2*smallest_note) notes
+        self.length = 1
+        smallest_note = 2*smallest_note
         for track in self.tracks:
             for t in track:
-                t[0] = round(t[0]*16/self.ticks_per_quarter)
-                t[-1] = round(t[-1]*16/self.ticks_per_quarter)
-        self.ticks_per_quarter = 16
-        self.length = round(self.length*16/self.ticks_per_quarter)
+                t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
+                t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
+            end = track[-1][0]+1+track[-1][-1]
+            if self.length < end:
+                self.length = end
+        self.ticks_per_quarter = smallest_note
         #Optionally remove instruments
         if piano_only:
             self.instruments = [0]
             self.track_instrument = [0] * len(self.tracks)
+
+
+def __track_length__(track):
+    return track[-1][0]+track[-1][-1]-track[0][0]
+
+def __track_concurrency__(track, length = 0):
+    if len(track) == 0:
+        return 0, 0
+    if length == 0:
+        length = __track_length__(track)
+        if length == 0:
+            length = 1
+    start = 0
+    end = 0
+    coverage = 0
+    tone_length = 0
+    for n in track:
+        if n[0] > end:
+            coverage += end-start
+            start = n[0]
+            end = n[0] + n[-1]
+        else:
+            new_end = n[0] + n[-1]
+            if new_end > end:
+                end = new_end
+        tone_length += n[-1]
+    coverage += end-start
+    if coverage == 0:
+        coverage = 1
+    return tone_length/coverage, tone_length/length
 
 
 def read_all_inputs():
