@@ -2,6 +2,7 @@
 import os
 from math import log2
 from collections import Counter
+import numpy
 
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
@@ -17,6 +18,7 @@ class Song(object):
     instruments = []
     track_instrument = []
     tracks = []
+    track_volume = []
     length = 0
 
 
@@ -31,7 +33,9 @@ class Song(object):
         instrument_key = dict()
         instrument_key[10] = PERCUSSION_INSTRUMENT
         self.tracks = []
+        self.track_volume = []
         self.length = 1
+        volumes = dict()
 
         for line in lines:
             split = line.split(", ")
@@ -66,6 +70,12 @@ class Song(object):
                 channel = int(split[3])
                 instrument = int(split[4])
                 instrument_key[channel] = instrument
+            elif split[2] == "Control_c" and split[4] == "7":
+                channel = int(split[3])
+                vol1 = int(split[5])
+                vol2 = volumes.get(channel, 0)
+                if vol1 > vol2:
+                    volumes[channel] = vol1
 
         for channel, instrument in instrument_key.items():
             if not instrument in self.instruments:
@@ -79,10 +89,10 @@ class Song(object):
                         self.track_instrument.append(instrument_key[key&255])
                     except KeyError:
                         self.track_instrument.append(instrument_key.get(10, 0))
+                    self.track_volume.append(volumes.get(key&255, 127))
                     self.tracks.append(track)
                     if self.length < length:
                         self.length = length
-
         file.close()
 
 
@@ -128,6 +138,12 @@ class Song(object):
                 int(self.ticks_per_quarter / t[3] * 4) <= smallest_note]
             conc_over_sound, conc_over_length = __track_concurrency__(track)
             if conc_over_sound < 0.3 or conc_over_length < 0.3:
+                track.clear()
+        #Remove quiet tracks
+        specified_volumes = [v for v in self.track_volume if v != 127]
+        min_volume = numpy.mean(specified_volumes)-numpy.std(specified_volumes)
+        for i, track in enumerate(self.tracks):
+            if self.track_volume[i] < min_volume:
                 track.clear()
         #Remove empty tracks
         self.tracks = [t for t in self.tracks if len(t) > 0]

@@ -7,14 +7,13 @@ import subprocess
 import os
 
 
-SONG_NAME = "to_town"
+SONG_NAME = "avemar~1" # avemar~1 to_town rudolph carolbel
 
 
 def plot_input_graphs(cleanup=False, one_song=False):
     songs = []
     if one_song:
         songs = [Song("input/"+SONG_NAME+".csv")]
-        songs[0].cleanup(False)
     else:
         songs = read_all_inputs()
         if cleanup:
