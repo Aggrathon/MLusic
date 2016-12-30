@@ -1,5 +1,6 @@
 
 import os
+import datetime
 from math import log2
 from collections import Counter
 import numpy
@@ -7,6 +8,7 @@ import numpy
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
 PERCUSSION_INSTRUMENT = -10
+DEFAULT_INSTRUMENT = 48
 
 
 class Song(object):
@@ -26,11 +28,11 @@ class Song(object):
         self.bar_length = 4
         self.beat_unit = 4
         self.tempo = 500000
-        self.ticks_per_quarter = 16
+        self.ticks_per_quarter = 4
         self.name = name
         self.instruments = []
         self.track_instrument = []
-        self.tracks = []
+        self.tracks = [] #lists of notes, note = [time, note, velocity, duration]
         self.track_volume = []
         self.length = 1
 
@@ -59,20 +61,19 @@ class Song(object):
                 velocity = int(split[5])
                 key = track_nr*256+channel
                 try:
-                    track_key[key].append([time, note, velocity, 0])
+                    track_key[key].append([time, note, velocity, self.ticks_per_quarter])
                 except (KeyError, TypeError):
-                    track_key[key] = [[time, note, velocity, 0]]
+                    track_key[key] = [[time, note, velocity, self.ticks_per_quarter]]
             elif split[2] == "Note_off_c": #setting the length of a note
                 track_nr = int(split[0])
                 time = int(split[1])
                 channel = int(split[3])
-                note = int(split[4])
+                tone = int(split[4])
                 key = track_nr*256+channel
                 track = track_key[key]
-                index = len(track)-1
-                while track[index][1] != note:
-                    index -= 1
-                track[index][-1] = time - track[index][0]
+                for note in reversed(track):
+                    if note[1] == tone:
+                        note[-1] = time - note[0]
             elif split[2] == "Tempo":
                 if split[0] == "0":
                     self.tempo = int(split[3])
@@ -113,9 +114,9 @@ class Song(object):
         if file_name is None:
             file_name = OUTPUT_FOLDER+self.name+".csv"
         file = open(file_name, "w")
-        file.write("0, 0, Header, 1, {}, {}\n".format(len(self.tracks), self.ticks_per_quarter))
+        file.write("0, 0, Header, 1, {}, {}\n".format(len(self.tracks)+1, self.ticks_per_quarter))
         file.write("1, 0, Start_track\n")
-        file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit)) ))
+        file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit))))
         file.write("1, 0, Tempo, {}\n".format(self.tempo))
         for i, ins in enumerate(self.instruments):
             if ins != PERCUSSION_INSTRUMENT:
@@ -135,16 +136,16 @@ class Song(object):
         file.write("0, 0, End_of_file\n")
         file.close()
 
-    def cleanup(self, piano_only=True, smallest_note=8):
+    def cleanup(self, one_instrument=True, smallest_note=8):
         for i, track in enumerate(self.tracks):
             #Remove percussion
             if self.instruments[self.track_instrument[i]] > 96 or self.instruments[self.track_instrument[i]] == PERCUSSION_INSTRUMENT:
                 track.clear()
                 continue
             #Remove short notes
-            track = [t for t in track if \
-                t[2] > 0 and t[3] > 0 and  \
-                int(self.ticks_per_quarter / t[3] * 4) <= smallest_note]
+            track = [n for n in track if \
+                n[2] > 0 and n[-1] > 0 and \
+                int(self.ticks_per_quarter / n[3] * 4) <= smallest_note]
             #Remove short tracks
             conc_over_sound, conc_over_length = __track_concurrency__(track)
             if conc_over_sound < 0.3 or conc_over_length < 0.3:
@@ -172,14 +173,14 @@ class Song(object):
             for track in self.tracks:
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
-                    t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
+                    t[-1] = max(round(t[-1]*smallest_note/self.ticks_per_quarter),1)
                 end = track[-1][0]+1+track[-1][-1]
                 if self.length < end:
                     self.length = end
             self.ticks_per_quarter = smallest_note
         #Optionally remove instruments
-        if piano_only:
-            self.instruments = [0]
+        if one_instrument:
+            self.instruments = [DEFAULT_INSTRUMENT]
             self.track_instrument = [0] * len(self.tracks)
         #Remove silence in the beginning
         start = self.length
@@ -192,16 +193,36 @@ class Song(object):
                 for n in track:
                     n[0] -= start
         #Return wether this song is usable
-        usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length > 200
+        usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length/self.ticks_per_quarter > 50
         return usable
 
     def generate_tone_matrix(self):
-        pass
-    
-    @staticmethod
-    def import_tone_matrix(matrix):
-        pass
+        self.cleanup(False, 8)
+        matrix = numpy.zeros(shape=(self.length, 128))
+        for track in self.tracks:
+            for note in track:
+                for i in range(0, note[-1]):
+                    matrix[note[0]+i, note[1]] = 1
+        return matrix
 
+    @staticmethod
+    def convert_tone_matrix(matrix):
+        song = Song('{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now()))
+        song.length, _ = matrix.shape
+        song.track_volume = [127]
+        song.track_instrument = [0]
+        song.instruments = [DEFAULT_INSTRUMENT]
+        song.tracks = [[]]
+        for note in range(0, 128):
+            last_on = 0
+            for time in range(0, song.length):
+                state = matrix[time, note]
+                if state == 0:
+                    if last_on != time:
+                        song.tracks[0].append([last_on, note, 85, time-last_on])
+                    last_on = time + 1
+        song.tracks[0].sort(key=lambda n: n[0])
+        return song
 
 def __track_length__(track):
     return track[-1][0]+track[-1][-1]-track[0][0]

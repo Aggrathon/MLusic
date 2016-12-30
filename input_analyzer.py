@@ -6,19 +6,25 @@ import tkinter
 from tkinter import ttk
 import numpy as np
 import matplotlib.pyplot as plt
-from song import read_all_inputs, Song, __track_length__, __track_concurrency__
+from song import read_all_inputs, Song, __track_length__, __track_concurrency__, OUTPUT_FOLDER, INPUT_FOLDER
 
 
-SONG_NAME = "to_town" # avemar~1 to_town rudolph carolbel sarajevo
+SONG_NAME = "sarajevo" # avemar~1 to_town rudolph carolbel sarajevo
 
 def histogram(data, title, bins="auto"):
     plt.clf()
     plt.hist(data, bins)
+    if len(data) > 1:
+        mean = np.mean(data)
+        std = np.std(data)
+        plt.axvline(mean, color="r")
+        plt.axvline(mean+std, color="y")
+        plt.axvline(mean-std, color="y")
     plt.title(title)
     plt.show()
 
 def graph_song_length(songs):
-    histogram([s.length/s.ticks_per_quarter/4*s.beat_unit/s.bar_length for s in songs], "Song Lengths", range(0, 210, 10))
+    histogram([s.length/s.ticks_per_quarter for s in songs], "Song Lengths")
 
 def graph_song_length_raw(songs):
     histogram([s.length for s in songs], "Song Raw Lengths")
@@ -110,18 +116,42 @@ def graph_track_width_mean(songs):
                 mean_concurrent += j-i
                 i += 1
             tracks_mean_width.append(mean_concurrent/len(t))
-    histogram(tracks_mean_width, "Track Mean Width", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0])
+    histogram(tracks_mean_width, "Track Mean Width", [i*0.5 for i in range(0, 12)])
+
+def graph_matrix(song):
+    matrix = song.generate_tone_matrix()
+    plt.clf()
+    plt.imshow(matrix.T, cmap='Greys', aspect='auto', interpolation='none')
+    plt.title("Note Matrix for "+song.name)
+    plt.show()
 
 
-def interactive_plot(cleanup=False, one_song=False):
-    songs = []
-    if one_song:
-        songs = [Song.read_csv_file("input/"+SONG_NAME+".csv")]
-    else:
-        songs = read_all_inputs()
-        if cleanup:
-            for s in songs:
-                s.cleanup(False)
+def interactive_plot(cleanup=False):
+    songs = read_all_inputs()
+    def select_data(value):
+        songs.clear()
+        if value == "All songs":
+            for s in read_all_inputs():
+                songs.append(s)
+        else:
+            songs.append(Song.read_csv_file(INPUT_FOLDER+value+".csv"))
+    def clean_data():
+        for s in songs:
+            s.cleanup(False)
+    if cleanup:
+        clean_data()
+
+    window = tkinter.Tk()
+    window.title("Input Analyser")
+    ttk.Label(window, text="Select Data:").pack(fill='x')
+    ttk.OptionMenu(window, tkinter.StringVar(), *(["All songs"]+[s.name for s in songs]), command=select_data).pack(fill='x')
+    ttk.Button(window, text="Cleanup songs", command=clean_data).pack(fill='x')
+    ttk.Label(window, text="Export: (Selected/First Song)").pack(fill='x')
+    ttk.Button(window, text="Export Cleaned", command=lambda: file_export(False, songs[0])).pack(fill='x')
+    ttk.Button(window, text="Export Matrixed", command=lambda: file_export(True, songs[0])).pack(fill='x')
+    ttk.Button(window, text="Show Matrix", command=lambda: graph_matrix(songs[0])).pack(fill='x')
+
+    ttk.Label(window, text="Select Graph:").pack(fill='x')
     graphs = [
         ("Song Length", graph_song_length),
         ("Song Raw Length", graph_song_length_raw),
@@ -132,6 +162,7 @@ def interactive_plot(cleanup=False, one_song=False):
         ("Instrument Counts", graph_instrument_num),
         ("Notes", graph_notes),
         ("Note Lengths", graph_notes_length_beats),
+        ("Note Lengths in Ticks", graph_notes_length_ticks),
         ("Note Velocities", graph_note_velocity),
         ("Track Counts", graph_track_num),
         ("Track Lengths", graph_track_len),
@@ -139,30 +170,32 @@ def interactive_plot(cleanup=False, one_song=False):
         ("Track Mean Widths", graph_track_width_mean),
         ("Track Concurrency", graph_track_concurrency)
     ]
-    window = tkinter.Tk()
-    window.title("Input Analyser")
-    ttk.Label(window, text="Select Graph:").pack(fill='x')
     for label, action in graphs:
         ttk.Button(window, text=label, command=lambda a=action: a(songs)).pack(fill='x')
     window.mainloop()
 
 
-def test_file_generation():
-    song = Song.read_csv_file("input/"+SONG_NAME+".csv")
+def file_export(matrix_conversion=False,song=None):
+    if song is None:
+        song = Song.read_csv_file(INPUT_FOLDER+SONG_NAME+".csv")
     song.cleanup()
+    if matrix_conversion:
+        matrix = song.generate_tone_matrix()
+        song = Song.convert_tone_matrix(matrix)
     song.save_to_file()
-    subprocess.run([".\\output\\Csvmidi.exe", "-v", ".\\output\\"+SONG_NAME+".csv", ".\\output\\"+SONG_NAME+".mid"], shell=True)
-    os.startfile(".\\output\\"+SONG_NAME+".mid")
+    folder = ".\\"+OUTPUT_FOLDER[:-1]+"\\"
+    subprocess.run([folder+"Csvmidi.exe", "-v", "{}{}.csv".format(folder, song.name), "{}{}.mid".format(folder, song.name)], shell=False)
+    os.startfile("{}{}.mid".format(folder, song.name))
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1] == "test":
-            test_file_generation()
+            file_export()
+        if sys.argv[1] == "test2":
+            file_export(True)
         elif sys.argv[1] == "clean":
             interactive_plot(cleanup=True)
-        elif sys.argv[1] == "one":
-            interactive_plot(one_song=True)
     else:
         interactive_plot()
 
