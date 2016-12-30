@@ -171,10 +171,13 @@ class Song(object):
         if self.ticks_per_quarter > smallest_note:
             self.length = 1
             for track in self.tracks:
+                end = 0
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
                     t[-1] = max(round(t[-1]*smallest_note/self.ticks_per_quarter),1)
-                end = track[-1][0]+1+track[-1][-1]
+                    new_end = t[0]+1+t[-1]
+                    if new_end > end:
+                        end = new_end
                 if self.length < end:
                     self.length = end
             self.ticks_per_quarter = smallest_note
@@ -196,12 +199,15 @@ class Song(object):
         usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length/self.ticks_per_quarter > 50
         return usable
 
-    def generate_tone_matrix(self):
+    def generate_tone_matrix(self, length=None):
+        if length is None:
+            length = self.length
         self.cleanup(False, 8)
-        matrix = numpy.zeros(shape=(self.length, 128))
-        for track in self.tracks:
+        matrix = numpy.zeros(shape=(length, 128))
+        for track in self.tracks[:length]:
             for note in track:
-                for i in range(0, note[-1]):
+                end = min(note[0] + note[-1], length) - note[0]
+                for i in range(0, end):
                     matrix[note[0]+i, note[1]] = 1
         return matrix
 

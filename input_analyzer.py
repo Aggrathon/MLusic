@@ -6,7 +6,7 @@ import tkinter
 from tkinter import ttk
 import numpy as np
 import matplotlib.pyplot as plt
-from song import read_all_inputs, Song, __track_length__, __track_concurrency__, OUTPUT_FOLDER, INPUT_FOLDER
+from song import *
 
 
 SONG_NAME = "sarajevo" # avemar~1 to_town rudolph carolbel sarajevo
