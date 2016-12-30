@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from song import read_all_inputs, Song, __track_length__, __track_concurrency__
 
 
-SONG_NAME = "avemar~1" # avemar~1 to_town rudolph carolbel
+SONG_NAME = "to_town" # avemar~1 to_town rudolph carolbel sarajevo
 
 def histogram(data, title, bins="auto"):
     plt.clf()
@@ -19,6 +19,9 @@ def histogram(data, title, bins="auto"):
 
 def graph_song_length(songs):
     histogram([s.length/s.ticks_per_quarter/4*s.beat_unit/s.bar_length for s in songs], "Song Lengths", range(0, 210, 10))
+
+def graph_song_length_raw(songs):
+    histogram([s.length for s in songs], "Song Raw Lengths")
 
 def graph_bar_length(songs):
     histogram([s.bar_length for s in songs], "Bar Lengths", range(2, 9))
@@ -39,7 +42,7 @@ def graph_instruments(songs):
     histogram([ins for s in songs for ins in s.instruments], "Instruments", range(0, 128))
 
 def graph_notes(songs):
-    histogram([n[1] for s in songs for t in s.tracks for n in t], "Notes", range(35, 86))
+    histogram([n[1] for s in songs for t in s.tracks for n in t], "Notes", range(0, 128))
 
 def graph_notes_length_ticks(songs):
     histogram([n[-1] for s in songs for t in s.tracks for n in t], "Note Lengths (ticks)")
@@ -113,7 +116,7 @@ def graph_track_width_mean(songs):
 def interactive_plot(cleanup=False, one_song=False):
     songs = []
     if one_song:
-        songs = [Song("input/"+SONG_NAME+".csv")]
+        songs = [Song.read_csv_file("input/"+SONG_NAME+".csv")]
     else:
         songs = read_all_inputs()
         if cleanup:
@@ -121,6 +124,7 @@ def interactive_plot(cleanup=False, one_song=False):
                 s.cleanup(False)
     graphs = [
         ("Song Length", graph_song_length),
+        ("Song Raw Length", graph_song_length_raw),
         ("Tempo", graph_tempo),
         ("Bar Length", graph_bar_length),
         ("Beat Unit", graph_beat_unit),
@@ -144,7 +148,7 @@ def interactive_plot(cleanup=False, one_song=False):
 
 
 def test_file_generation():
-    song = Song("input/"+SONG_NAME+".csv")
+    song = Song.read_csv_file("input/"+SONG_NAME+".csv")
     song.cleanup()
     song.save_to_file()
     subprocess.run([".\\output\\Csvmidi.exe", "-v", ".\\output\\"+SONG_NAME+".csv", ".\\output\\"+SONG_NAME+".mid"], shell=True)

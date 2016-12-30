@@ -13,28 +13,40 @@ class Song(object):
     name = ""
     bar_length = 4
     beat_unit = 4
-    tempo = 0
-    ticks_per_quarter = 0
+    tempo = 500000
+    ticks_per_quarter = 4
     instruments = []
     track_instrument = []
     tracks = []
     track_volume = []
-    length = 0
+    length = 1
 
 
-    def __init__(self, file_name):
-        file = open(file_name, "r")
-        lines = file.readlines()
-        self.ticks_per_quarter = int(lines[0][lines[0].rfind(",")+2:])
-        self.name = file_name[file_name.find("/")+1:file_name.rfind(".")]
+    def __init__(self, name):
+        self.bar_length = 4
+        self.beat_unit = 4
+        self.tempo = 500000
+        self.ticks_per_quarter = 16
+        self.name = name
         self.instruments = []
         self.track_instrument = []
-        track_key = dict()
-        instrument_key = dict()
-        instrument_key[10] = PERCUSSION_INSTRUMENT
         self.tracks = []
         self.track_volume = []
         self.length = 1
+
+    def __repr__(self):
+        return "<Song '{}'>".format(self.name)
+
+    @staticmethod
+    def read_csv_file(file_name):
+        self = Song(file_name[file_name.find("/")+1:file_name.rfind(".")])
+        file = open(file_name, "r")
+        lines = file.readlines()
+        self.ticks_per_quarter = int(lines[0][lines[0].rfind(",")+2:])
+
+        track_key = dict()
+        instrument_key = dict()
+        instrument_key[10] = PERCUSSION_INSTRUMENT
         volumes = dict()
 
         for line in lines:
@@ -62,7 +74,8 @@ class Song(object):
                     index -= 1
                 track[index][-1] = time - track[index][0]
             elif split[2] == "Tempo":
-                self.tempo = int(split[3])
+                if split[0] == "0":
+                    self.tempo = int(split[3])
             elif split[2] == "Time_signature":
                 self.bar_length = int(split[3])
                 self.beat_unit = 2**int(split[4])
@@ -94,11 +107,7 @@ class Song(object):
                     if self.length < length:
                         self.length = length
         file.close()
-
-
-    def __repr__(self):
-        return "<Song '{}'>".format(self.name)
-
+        return self
 
     def save_to_file(self, file_name=None):
         if file_name is None:
@@ -126,42 +135,72 @@ class Song(object):
         file.write("0, 0, End_of_file\n")
         file.close()
 
-    def cleanup(self, piano_only=True, smallest_note = 8):
-        #Remove percussion
-        self.tracks = [t for i, t in enumerate(self.tracks) if \
-            self.instruments[self.track_instrument[i]] < 97 and \
-            self.instruments[self.track_instrument[i]] != PERCUSSION_INSTRUMENT]
-        #Remove short notes and tracks
-        for track in self.tracks:
+    def cleanup(self, piano_only=True, smallest_note=8):
+        for i, track in enumerate(self.tracks):
+            #Remove percussion
+            if self.instruments[self.track_instrument[i]] > 96 or self.instruments[self.track_instrument[i]] == PERCUSSION_INSTRUMENT:
+                track.clear()
+                continue
+            #Remove short notes
             track = [t for t in track if \
                 t[2] > 0 and t[3] > 0 and  \
                 int(self.ticks_per_quarter / t[3] * 4) <= smallest_note]
+            #Remove short tracks
             conc_over_sound, conc_over_length = __track_concurrency__(track)
             if conc_over_sound < 0.3 or conc_over_length < 0.3:
                 track.clear()
         #Remove quiet tracks
-        specified_volumes = [v for v in self.track_volume if v != 127]
-        min_volume = numpy.mean(specified_volumes)-numpy.std(specified_volumes)
-        for i, track in enumerate(self.tracks):
-            if self.track_volume[i] < min_volume:
-                track.clear()
+        specified_volumes = [v for i, v in enumerate(self.track_volume) if v != 127 and len(self.tracks[i]) > 0]
+        if len(specified_volumes) > 0:
+            min_volume = numpy.mean(specified_volumes)-numpy.std(specified_volumes)
+            for i, track in enumerate(self.tracks):
+                if self.track_volume[i] < min_volume:
+                    track.clear()
         #Remove empty tracks
-        self.tracks = [t for t in self.tracks if len(t) > 0]
+        new_tracks = []
+        new_volumes = []
+        for i, track in enumerate(self.tracks):
+            if len(track) > 0:
+                new_tracks.append(track)
+                new_volumes.append(self.track_volume[i])
+        self.tracks = new_tracks
+        self.track_volume = new_volumes
         #Decrease the resolution to 1/(2*smallest_note) notes
-        self.length = 1
-        smallest_note = 2*smallest_note
-        for track in self.tracks:
-            for t in track:
-                t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
-                t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
-            end = track[-1][0]+1+track[-1][-1]
-            if self.length < end:
-                self.length = end
-        self.ticks_per_quarter = smallest_note
+        smallest_note = smallest_note/2 #relative to quarter notes
+        if self.ticks_per_quarter > smallest_note:
+            self.length = 1
+            for track in self.tracks:
+                for t in track:
+                    t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
+                    t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
+                end = track[-1][0]+1+track[-1][-1]
+                if self.length < end:
+                    self.length = end
+            self.ticks_per_quarter = smallest_note
         #Optionally remove instruments
         if piano_only:
             self.instruments = [0]
             self.track_instrument = [0] * len(self.tracks)
+        #Remove silence in the beginning
+        start = self.length
+        for t in self.tracks:
+            if start > t[0][0]:
+                start = t[0][0]
+        if start > 0:
+            self.length -= start
+            for track in self.tracks:
+                for n in track:
+                    n[0] -= start
+        #Return wether this song is usable
+        usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length > 200
+        return usable
+
+    def generate_tone_matrix(self):
+        pass
+    
+    @staticmethod
+    def import_tone_matrix(matrix):
+        pass
 
 
 def __track_length__(track):
@@ -195,4 +234,4 @@ def __track_concurrency__(track, length = 0):
 
 
 def read_all_inputs():
-    return [Song(INPUT_FOLDER+s) for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
+    return [Song.read_csv_file(INPUT_FOLDER+s) for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
