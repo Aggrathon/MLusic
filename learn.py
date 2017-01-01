@@ -5,8 +5,10 @@ import numpy
 import tflearn
 from song import *
 
+SEQUENCE_LENGTH = 128
 
-def get_data(sequence_length=16, scramble_sequences=True):
+
+def get_data(sequence_length=SEQUENCE_LENGTH, scramble_sequences=True):
     songs = read_all_inputs()
     dictionary = { i : i for i in range(128) }
     matrices = [s.generate_tone_matrix() for s in songs if s.cleanup()]
@@ -27,7 +29,7 @@ def get_data(sequence_length=16, scramble_sequences=True):
             y[i] = tmp
     return dictionary, x, y
 
-def build_network(sequence_length=16, dictionary=None):
+def build_network(sequence_length=SEQUENCE_LENGTH, dictionary=None):
     learning_rate = 0.001
 
     rnn = tflearn.input_data(shape=[None, sequence_length, 128])
@@ -43,19 +45,19 @@ def build_network(sequence_length=16, dictionary=None):
     return gen
 
 def learn():
-    seq_len = 16
+    seq_len = SEQUENCE_LENGTH
 
     print("Gathering data")
     dictionary, x, y = get_data(seq_len)
     print("Building the neural network")
     network = build_network(seq_len, dictionary)
     print("Starting the learning process")
-    network.fit(x, y, n_epoch=1, show_metric=True, snapshot_epoch=True, validation_set=0.1)
-    network.save(OUTPUT_FOLDER+"second.tflearn")
-    print("Trained Network Configuration saved to {}second.tflearn".format(OUTPUT_FOLDER))
+    network.fit(x, y, n_epoch=2, show_metric=True, snapshot_epoch=True, validation_set=0.1)
+    network.save(OUTPUT_FOLDER+"third.tflearn")
+    print("Trained Network Configuration saved to {}third.tflearn".format(OUTPUT_FOLDER))
 
 def generate():
-    seq_len = 16
+    seq_len = SEQUENCE_LENGTH
     song_len = 1000
 
     print("Gathering data")
@@ -63,25 +65,28 @@ def generate():
     print("Building the neural network")
     network = build_network(seq_len, dictionary)
     print("Loading the configuration")
-    network.load(OUTPUT_FOLDER+"second.tflearn")
+    network.load(OUTPUT_FOLDER+"third.tflearn")
 
     print("Generating a new sequence")
     sequence = x[random.randint(0, len(x)-1)]
     generated = sequence
+    print(numpy.sum(sequence))
     for i in range(song_len):
         pred = numpy.array(network._predict([sequence]))
         array_to_boolean(pred)
         combine = numpy.zeros((seq_len+i+1, 128))
         combine[:-1, :] = generated
         combine[-1:, :] = pred
+        #print(numpy.sum(pred),numpy.sum(combine)-numpy.sum(generated))
         generated = combine
-        sequence = combine[:16, :]
+        sequence = combine[-seq_len:, :]
         if i % 200 == 0 and i != 0:
             print("{} / {} notes generated".format(i,song_len))
-    song = Song.convert_tone_matrix(numpy.array(generated))
+    song = Song.convert_tone_matrix(generated)
     from input_analyzer import graph_matrix
-    graph_matrix(song)
+    #graph_matrix(song)
     song.save_to_file()
+    print(generated.shape, numpy.sum(generated), numpy.sum(generated[:16,:]))
     print("Generated song saved to "+OUTPUT_FOLDER+song.name+".csv", song.length)
 
 def array_to_boolean(matrix):
@@ -90,7 +95,6 @@ def array_to_boolean(matrix):
     for i in range(shx):
         for j in range(shy):
             if matrix[i, j] > mean:
-                print(mean)
                 matrix[i, j] = 1
             else:
                 matrix[i, j] = 0
