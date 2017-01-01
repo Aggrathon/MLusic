@@ -23,6 +23,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.whl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -87,6 +88,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
+# VS Code
+.vscode
+
 # =========================
 # Operating System Files
 # =========================
@@ -137,3 +141,17 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+
+
+# Project
+# ===================
+
+# Ignore input and output data
+input/*
+output/*
+!input/README.md
+!output/README.md
+!output/convert*.py
+
+
