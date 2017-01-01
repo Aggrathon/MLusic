@@ -2,11 +2,9 @@
 import os
 import datetime
 from math import log2
-from collections import Counter
 import numpy
+from config import *
 
-INPUT_FOLDER = "input/"
-OUTPUT_FOLDER = "output/"
 PERCUSSION_INSTRUMENT = -10
 DEFAULT_INSTRUMENT = 0 #48
 
@@ -110,9 +108,9 @@ class Song(object):
         file.close()
         return self
 
-    def save_to_file(self, file_name=None):
+    def save_to_file(self, file_name=None) -> str:
         if file_name is None:
-            file_name = OUTPUT_FOLDER+self.name+".csv"
+            file_name = os.path.join(OUTPUT_FOLDER, self.name+".csv")
         file = open(file_name, "w")
         file.write("0, 0, Header, 1, {}, {}\n".format(len(self.tracks)+1, self.ticks_per_quarter))
         file.write("1, 0, Start_track\n")
@@ -135,6 +133,7 @@ class Song(object):
             file.write("{}, {}, End_track\n".format(track_nr, notes[-1][0]+1))
         file.write("0, 0, End_of_file\n")
         file.close()
+        return file_name
 
     def cleanup(self, one_instrument=True, smallest_note=8):
         for i, track in enumerate(self.tracks):
@@ -259,4 +258,5 @@ def track_concurrency(track, length=0):
 
 
 def read_all_inputs():
-    return [Song.read_csv_file(INPUT_FOLDER+s) for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
+    return [Song.read_csv_file(os.path.join(INPUT_FOLDER, s))
+            for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]

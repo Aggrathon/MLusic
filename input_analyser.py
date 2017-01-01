@@ -1,12 +1,13 @@
 
 import sys
-import subprocess
 import os
 import tkinter
 from tkinter import ttk
 import numpy as np
 import matplotlib.pyplot as plt
 from song import *
+from platform_dependent import save_and_convert_song
+from config import *
 
 
 SONG_NAME = "sarajevo" # avemar~1 to_town rudolph carolbel sarajevo
@@ -134,7 +135,7 @@ def interactive_plot(cleanup=False):
             for s in read_all_inputs():
                 songs.append(s)
         else:
-            songs.append(Song.read_csv_file(INPUT_FOLDER+value+".csv"))
+            songs.append(Song.read_csv_file(os.path.join(INPUT_FOLDER, value+".csv")))
     def clean_data():
         for s in songs:
             s.cleanup(False)
@@ -177,15 +178,12 @@ def interactive_plot(cleanup=False):
 
 def file_export(matrix_conversion=False,song=None):
     if song is None:
-        song = Song.read_csv_file(INPUT_FOLDER+SONG_NAME+".csv")
+        song = Song.read_csv_file(os.path.join(INPUT_FOLDER, SONG_NAME+".csv"))
     song.cleanup()
     if matrix_conversion:
         matrix = song.generate_tone_matrix()
         song = Song.convert_tone_matrix(matrix)
-    song.save_to_file()
-    folder = ".\\"+OUTPUT_FOLDER[:-1]+"\\"
-    subprocess.run([folder+"Csvmidi.exe", "-v", "{}{}.csv".format(folder, song.name), "{}{}.mid".format(folder, song.name)], shell=False)
-    os.startfile("{}{}.mid".format(folder, song.name))
+    save_and_convert_song(song, True)
 
 
 if __name__ == "__main__":
@@ -196,6 +194,8 @@ if __name__ == "__main__":
             file_export(True)
         elif sys.argv[1] == "clean":
             interactive_plot(cleanup=True)
+        else:
+            interactive_plot()
     else:
         interactive_plot()
 
