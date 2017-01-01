@@ -11,10 +11,10 @@ from song import *
 
 SONG_NAME = "sarajevo" # avemar~1 to_town rudolph carolbel sarajevo
 
-def histogram(data, title, bins="auto"):
+def histogram(data, title, bins="auto", show_mean=True):
     plt.clf()
     plt.hist(data, bins)
-    if len(data) > 1:
+    if show_mean and len(data) > 1:
         mean = np.mean(data)
         std = np.std(data)
         plt.axvline(mean, color="r")
@@ -63,7 +63,7 @@ def graph_track_num(songs):
     histogram(list(np.array([len(s.tracks) for s in songs]).flat), "Tracks", range(1,20))
 
 def graph_track_len(songs):
-    histogram([__track_length__(t)*100/s.length for s in songs for t in s.tracks], "Track Lengths (song length %)", range(0, 100, 5))
+    histogram([track_length(t)*100/s.length for s in songs for t in s.tracks], "Track Lengths (song length %)", range(0, 100, 5))
 
 def graph_track_concurrency(songs):
     plt.clf()
@@ -71,7 +71,7 @@ def graph_track_concurrency(songs):
     tracks_conc = []
     for s in songs:
         for t in s.tracks:
-            conc, length = __track_concurrency__(t)
+            conc, length = track_concurrency(t)
             tracks_conc.append(conc*100)
             tracks_len.append(length*100)
     plt.hist(tracks_conc, bins=range(0, 400, 10), label="sound length", alpha=0.5)
@@ -97,7 +97,7 @@ def graph_track_width_max(songs):
                     max_concurrent = j-i
                 i += 1
             tracks_max_width.append(max_concurrent)
-    histogram(tracks_max_width, "Track Max Width", range(0,30))
+    histogram(tracks_max_width, "Track Max Width", range(0,30), False)
 
 def graph_track_width_mean(songs):
     tracks_mean_width = []
@@ -116,7 +116,7 @@ def graph_track_width_mean(songs):
                 mean_concurrent += j-i
                 i += 1
             tracks_mean_width.append(mean_concurrent/len(t))
-    histogram(tracks_mean_width, "Track Mean Width", [i*0.5 for i in range(0, 12)])
+    histogram(tracks_mean_width, "Track Mean Width", [i*0.5 for i in range(0, 12)], False)
 
 def graph_matrix(song):
     matrix = song.generate_tone_matrix()

@@ -8,7 +8,7 @@ import numpy
 INPUT_FOLDER = "input/"
 OUTPUT_FOLDER = "output/"
 PERCUSSION_INSTRUMENT = -10
-DEFAULT_INSTRUMENT = 48
+DEFAULT_INSTRUMENT = 0 #48
 
 
 class Song(object):
@@ -147,7 +147,7 @@ class Song(object):
                 n[2] > 0 and n[-1] > 0 and \
                 int(self.ticks_per_quarter / n[3] * 4) <= smallest_note]
             #Remove short tracks
-            conc_over_sound, conc_over_length = __track_concurrency__(track)
+            conc_over_sound, conc_over_length = track_concurrency(track)
             if conc_over_sound < 0.3 or conc_over_length < 0.3:
                 track.clear()
         #Remove quiet tracks
@@ -199,21 +199,18 @@ class Song(object):
         usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length/self.ticks_per_quarter > 50
         return usable
 
-    def generate_tone_matrix(self, length=None):
-        if length is None:
-            length = self.length
+    def generate_tone_matrix(self):
         self.cleanup(False, 8)
-        matrix = numpy.zeros(shape=(length, 128))
-        for track in self.tracks[:length]:
+        matrix = numpy.zeros(shape=(self.length, 128))
+        for track in self.tracks[:self.length]:
             for note in track:
-                end = min(note[0] + note[-1], length) - note[0]
-                for i in range(0, end):
+                for i in range(0, note[-1]):
                     matrix[note[0]+i, note[1]] = 1
         return matrix
 
     @staticmethod
     def convert_tone_matrix(matrix):
-        song = Song('{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now()))
+        song = Song('song-{:%Y%m%d%H%M%S}'.format(datetime.datetime.now()))
         song.length, _ = matrix.shape
         song.track_volume = [127]
         song.track_instrument = [0]
@@ -230,14 +227,15 @@ class Song(object):
         song.tracks[0].sort(key=lambda n: n[0])
         return song
 
-def __track_length__(track):
+
+def track_length(track):
     return track[-1][0]+track[-1][-1]-track[0][0]
 
-def __track_concurrency__(track, length = 0):
+def track_concurrency(track, length=0):
     if len(track) == 0:
         return 0, 0
     if length == 0:
-        length = __track_length__(track)
+        length = track_length(track)
         if length == 0:
             length = 1
     start = 0

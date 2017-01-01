@@ -152,5 +152,6 @@ input/*
 output/*
 !input/README.md
 !output/README.md
+!output/convert*.py
 
 
