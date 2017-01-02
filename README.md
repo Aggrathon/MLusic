@@ -3,19 +3,21 @@
 ## Dependencies
  - Python 3
  - Tensorflow
- - TFLearn ([http://tflearn.org/](http://tflearn.org/))
- - MidiCsv ([http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/))
+ - TFLearn &nbsp; ([http://tflearn.org/](http://tflearn.org/))
+ - MidiCsv &nbsp; ([http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/))
  - Numpy
 
 ## Data
-Both the input and the output is in the form of midicsv as formatted by the tool 
-[http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/). 
-The program will use all  *.csv files in the input folder as learning data, expecting them to be already converted midi files.
-It outputs .csv files to the output folder ready to be converted to midi.
+Both the learning data and the generated results are midi-files.
+As a bridge between python and midi the tool from 
+[http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/)
+is used (the windows binaries are included, for other platforms the tool must be compiled from source).
+Before being used for learning the songs are stripped of any percussion, short decorative tracks or really short notes.
 
 ## Usage
- 1. Put your learning midi files in the input folder and convert them to .csv  
-   \- Optionally analyze the song composition using: `python input_analyzer.py`
- 2. Train the neural network using: `python learn.py`
- 3. Generate a new song using: `python learn.py generate`
- 4. The new song will appear in the output folder as a csv (convert it to midi to listen to it)
+ 1. Put your learning midi files in the input folder
+ 2. Convert them to csv-files using: &nbsp; &nbsp; `python main.py convert input`  
+    - If not on Windows you must compile the midi-csv utility first
+ 4. Train the neural network using: &nbsp; &nbsp; `python main.py train`
+ 5. Generate a new song using: &nbsp; &nbsp; `python main.py generate`
+ 6. To see all available options just run: &nbsp; &nbsp; `python main.py help`

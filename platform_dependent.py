@@ -49,6 +49,7 @@ def check_output_converter() -> (bool, str):
 def convert_inputs(reconvert=False):
     converter_exists, exe = check_input_converter()
     if converter_exists:
+        print("Converting all midis in the", INPUT_FOLDER, "folder to csvs")
         files = os.listdir(INPUT_FOLDER)
         csvs = [f[:-4] for f in files if f.endswith(".csv")]
         midis = [f[:-4] for f in files if f.endswith(".mid")]+[f[:-5] for f in files if f.endswith(".midi")]
@@ -66,6 +67,7 @@ def convert_inputs(reconvert=False):
 def convert_outputs(reconvert=False):
     converter_exists, exe = check_output_converter()
     if converter_exists:
+        print("Converting all csvs in the", OUTPUT_FOLDER, "folder to midis")
         files = os.listdir(OUTPUT_FOLDER)
         csvs = [f[:-4] for f in files if f.endswith(".csv")]
         midis = [f[:-4] for f in files if f.endswith(".mid")]+[f[:-5] for f in files if f.endswith(".midi")]
