@@ -1,3 +1,4 @@
 ## Learning data here
-The songs should be in the midicsv format as used by this program: 
+The data should be midi files ready to be converted, or already converted,
+to csv-files by using this tool: 
 [http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/)
