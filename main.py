@@ -27,13 +27,13 @@ if __name__ == "__main__":
 
     elif argv[1] == "train":
         if len(argv) > 2:
-            print("Not yet implemented")
+            train(argv[2])
         else:
             train()
 
     elif argv[1] == "generate":
         if len(argv) > 2:
-            print("Not yet implemented")
+            generate(argv[2])
         else:
             generate()
 

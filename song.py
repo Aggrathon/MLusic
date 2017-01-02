@@ -136,18 +136,10 @@ class Song(object):
         return file_name
 
     def cleanup(self, one_instrument=True, smallest_note=8):
+        #Remove percussion
         for i, track in enumerate(self.tracks):
-            #Remove percussion
-            if self.instruments[self.track_instrument[i]] > 96 or self.instruments[self.track_instrument[i]] == PERCUSSION_INSTRUMENT:
-                track.clear()
-                continue
-            #Remove short notes
-            track = [n for n in track if \
-                n[2] > 0 and n[-1] > 0 and \
-                int(self.ticks_per_quarter / n[3] * 4) <= smallest_note]
-            #Remove short tracks
-            conc_over_sound, conc_over_length = track_concurrency(track)
-            if conc_over_sound < 0.3 or conc_over_length < 0.3:
+            instrument = self.instruments[self.track_instrument[i]]
+            if instrument > 96 or instrument == PERCUSSION_INSTRUMENT:
                 track.clear()
         #Remove quiet tracks
         specified_volumes = [v for i, v in enumerate(self.track_volume) if v != 127 and len(self.tracks[i]) > 0]
@@ -156,15 +148,6 @@ class Song(object):
             for i, track in enumerate(self.tracks):
                 if self.track_volume[i] < min_volume:
                     track.clear()
-        #Remove empty tracks
-        new_tracks = []
-        new_volumes = []
-        for i, track in enumerate(self.tracks):
-            if len(track) > 0:
-                new_tracks.append(track)
-                new_volumes.append(self.track_volume[i])
-        self.tracks = new_tracks
-        self.track_volume = new_volumes
         #Decrease the resolution to 1/(2*smallest_note) notes
         smallest_note = smallest_note/2 #relative to quarter notes
         if self.ticks_per_quarter > smallest_note:
@@ -174,12 +157,32 @@ class Song(object):
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
                     t[-1] = max(round(t[-1]*smallest_note/self.ticks_per_quarter),1)
+                # Remove too short or too long notes
+                track = [n for n in track if n[2] > 0 and n[-1] > 1 and n[-1] < MAX_TONE_LENGTH]
+                for t in track:
                     new_end = t[0]+1+t[-1]
                     if new_end > end:
                         end = new_end
                 if self.length < end:
                     self.length = end
             self.ticks_per_quarter = smallest_note
+        #Remove short tracks
+        for track in self.tracks:
+            conc_over_sound, conc_over_length = track_concurrency(track)
+            if conc_over_sound < MIN_TRACK_COVERAGE or conc_over_length < MIN_TRACK_COVERAGE:
+                track.clear()
+        #Remove empty tracks
+        new_tracks = []
+        new_volumes = []
+        new_instruments = []
+        for i, track in enumerate(self.tracks):
+            if len(track) > 0:
+                new_tracks.append(track)
+                new_volumes.append(self.track_volume[i])
+                new_instruments.append(self.track_instrument[i])
+        self.tracks = new_tracks
+        self.track_volume = new_volumes
+        self.track_instrument = new_instruments
         #Optionally remove instruments
         if one_instrument:
             self.instruments = [DEFAULT_INSTRUMENT]
@@ -195,16 +198,22 @@ class Song(object):
                 for n in track:
                     n[0] -= start
         #Return wether this song is usable
-        usable = self.tempo < 1000000 and len(self.tracks) > 0 and self.length/self.ticks_per_quarter > 50
-        return usable
+        return \
+            self.tempo < MAX_SONG_TEMPO and \
+            len(self.tracks) > 0 and \
+            self.length/self.ticks_per_quarter > MIN_SONG_LENGTH and \
+            (not ENFORCE_COMMON_TIME or (self.bar_length == 4 and self.beat_unit == 4))
 
     def generate_tone_matrix(self):
-        self.cleanup(False, 8)
-        matrix = numpy.zeros(shape=(self.length, 128))
+        self.cleanup(False, TIME_RESOLUTION/2)
+        note_range = HIGHEST_NOTE-LOWEST_NOTE
+        matrix = numpy.zeros(shape=(self.length, note_range))
         for track in self.tracks[:self.length]:
             for note in track:
                 for i in range(0, note[-1]):
-                    matrix[note[0]+i, note[1]] = 1
+                    n = note[1] - LOWEST_NOTE
+                    if n >= 0 and n < note_range:
+                        matrix[note[0]+i, n] = 1
         return matrix
 
     @staticmethod
@@ -215,13 +224,13 @@ class Song(object):
         song.track_instrument = [0]
         song.instruments = [DEFAULT_INSTRUMENT]
         song.tracks = [[]]
-        for note in range(0, 128):
+        for note in range(0, HIGHEST_NOTE-LOWEST_NOTE):
             last_on = 0
             for time in range(0, song.length):
                 state = matrix[time, note]
                 if state == 0:
                     if last_on != time:
-                        song.tracks[0].append([last_on, note, 85, time-last_on])
+                        song.tracks[0].append([last_on, note+LOWEST_NOTE, 85, time-last_on])
                     last_on = time + 1
         song.tracks[0].sort(key=lambda n: n[0])
         return song

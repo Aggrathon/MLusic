@@ -82,9 +82,10 @@ def convert_outputs(reconvert=False):
         else:
             print("No csvs found")
 
-def save_and_convert_song(song: Song, play_on_finished=False):
+def save_and_convert_song(song: Song, play_on_finished=False) -> str:
     file_name = song.save_to_file()
     converter_exists, exe = check_output_converter()
     if converter_exists:
         subprocess.run([exe, "-v", file_name, file_name[:-4]+".mid"], shell=False)
         os.startfile(file_name[:-4]+".mid")
+    return file_name

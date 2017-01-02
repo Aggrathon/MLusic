@@ -132,11 +132,14 @@ def interactive_plot(cleanup=False):
     def select_data(value):
         songs.clear()
         if value == "All songs":
+            print("Showing graphs for all songs")
             for s in read_all_inputs():
                 songs.append(s)
         else:
+            print("Showing graphs for "+value)
             songs.append(Song.read_csv_file(os.path.join(INPUT_FOLDER, value+".csv")))
     def clean_data():
+        print("Cleaning input")
         for s in songs:
             s.cleanup(False)
     if cleanup:
