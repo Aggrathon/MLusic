@@ -8,6 +8,9 @@ from tflearn.data_utils import shuffle
 from song import *
 from platform_dependent import save_and_convert_song
 
+NOTE_RANGE = HIGHEST_NOTE - LOWEST_NOTE
+if ADD_META_TO_MATRIX:
+    NOTE_RANGE += 2
 
 def get_data(scramble_sequences: bool=True) -> ([], []):
     if ADD_META_TO_MATRIX:
@@ -27,23 +30,24 @@ def get_data(scramble_sequences: bool=True) -> ([], []):
         return x, y
 
 def add_time_signature(matrix: numpy.ndarray, length: int) -> numpy.ndarray:
-    rel_time = [float(i/length) for i in range(length)]
-    bar_time = [i%(TIME_RESOLUTION*4) for i in range(length)]
-    return numpy.vstack(matrix, rel_time, bar_time)
+    m_len, _ = matrix.shape
+    rel_time = [[float(i/length)] for i in range(m_len)]
+    bar_time = [[i%(TIME_RESOLUTION*4)] for i in range(m_len)]
+    return numpy.hstack((matrix, rel_time, bar_time))
 
 def build_network(name: str=None):
-    rnn = tflearn.input_data(shape=[None, SEQUENCE_LENGTH, HIGHEST_NOTE-LOWEST_NOTE])
+    rnn = tflearn.input_data(shape=[None, SEQUENCE_LENGTH, NOTE_RANGE])
     for i in range(NETWORK_DEPTH):
         rnn = tflearn.lstm(rnn, NETWORK_WIDTH, return_seq=(i < NETWORK_DEPTH/2))
         rnn = tflearn.dropout(rnn, DROPOUT)
-    rnn = tflearn.fully_connected(rnn, HIGHEST_NOTE-LOWEST_NOTE, activation='softmax')
+    rnn = tflearn.fully_connected(rnn, NOTE_RANGE, activation='softmax')
     rnn = tflearn.regression(rnn, optimizer='adam', loss='binary_crossentropy', learning_rate=LEARNING_RATE)
-    rnn = tflearn.SequenceGenerator(rnn, {i: i for i in range(HIGHEST_NOTE-LOWEST_NOTE)}, seq_maxlen=SEQUENCE_LENGTH,
+    sqgen = tflearn.SequenceGenerator(rnn, {i: i for i in range(NOTE_RANGE)}, seq_maxlen=SEQUENCE_LENGTH, \
             checkpoint_path=os.path.join(NETWORK_FOLDER, "checkpoints"), tensorboard_dir=os.path.join(NETWORK_FOLDER, "logs"))
     network_path = check_network(name)
     if network_path != '':
-        rnn.load(network_path)
-    return rnn
+        sqgen.load(network_path)
+    return sqgen
 
 def check_network(name: str=None) -> str:
     if name is not None:
@@ -61,7 +65,7 @@ def check_network(name: str=None) -> str:
             return ''
         else:
             meta.sort(key=lambda value: os.path.getmtime(value))
-            return meta[:-5]
+            return meta[0][:-5]
 
 def get_network_path(name: str) -> str:
     if name is None:
@@ -72,7 +76,7 @@ def get_network_path(name: str) -> str:
 def train(network_name: str=None):
     print("Gathering data")
     x, y = get_data()
-    print("Building the neural network")
+    print("Constructing the neural network")
     network = build_network(network_name)
     print("Starting the learning process")
     network.fit(x, y, n_epoch=TRAINING_EPOCHS, show_metric=True, snapshot_epoch=True, validation_set=VALIDATION_SIZE)
@@ -84,22 +88,22 @@ def generate(network_name: str=None):
     if check_network(network_name) == '':
         print("Cannot generate a song with an empty network")
         return
-    print("Building the neural network")
+    print("Constructing the neural network")
     network = build_network(network_name)
 
     print("Gathering data")
     songs = read_all_inputs()
     if ADD_META_TO_MATRIX:
-        sequence = add_time_signature(random.choice(songs)[:SEQUENCE_LENGTH], SONG_LENGTH)
+        sequence = add_time_signature(random.choice(songs).generate_tone_matrix()[:SEQUENCE_LENGTH], SONG_LENGTH)
     else:
         sequence = random.choice(songs)[:SEQUENCE_LENGTH]
-    songs = None
+    songs.clear()
     generated = sequence
     print("Generating a new sequence")
     for i in range(SONG_LENGTH):
         pred = numpy.array(network._predict([sequence]))
         array_to_boolean(pred, SEQUENCE_LENGTH+i, SONG_LENGTH)
-        combine = numpy.zeros((SEQUENCE_LENGTH+i+1, HIGHEST_NOTE-LOWEST_NOTE))
+        combine = numpy.zeros((SEQUENCE_LENGTH+i+1, NOTE_RANGE))
         combine[:-1, :] = generated
         combine[-1:, :] = pred
         generated = combine

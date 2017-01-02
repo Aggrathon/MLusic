@@ -9,7 +9,8 @@ ENFORCE_COMMON_TIME = True  #Common time == 4/4
 
 # Song Generation
 #   - These configs will change how new songs are generated
-SONG_LENGTH = 600
+SONG_LENGTH = 2048
+INSTRUMENT = 0 #48
 
 # Neural Network Training
 #   - These configs change how the network is trained
@@ -20,9 +21,9 @@ VALIDATION_SIZE = 0.1
 # Neural Network Layout
 #   - Changing these will require you to recreate and retrain any existing network
 NETWORK_WIDTH = 512
-NETWORK_DEPTH = 3
+NETWORK_DEPTH = 2
 DROPOUT = 0.5
-SEQUENCE_LENGTH = 128
+SEQUENCE_LENGTH = 192
 LOWEST_NOTE = 24
 HIGHEST_NOTE = 104
 TIME_RESOLUTION = 16

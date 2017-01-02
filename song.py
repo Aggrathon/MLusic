@@ -6,7 +6,6 @@ import numpy
 from config import *
 
 PERCUSSION_INSTRUMENT = -10
-DEFAULT_INSTRUMENT = 0 #48
 
 
 class Song(object):
@@ -151,21 +150,23 @@ class Song(object):
         #Decrease the resolution to 1/(2*smallest_note) notes
         smallest_note = smallest_note/2 #relative to quarter notes
         if self.ticks_per_quarter > smallest_note:
-            self.length = 1
             for track in self.tracks:
-                end = 0
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
-                    t[-1] = max(round(t[-1]*smallest_note/self.ticks_per_quarter),1)
+                    t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
                 # Remove too short or too long notes
                 track = [n for n in track if n[2] > 0 and n[-1] > 1 and n[-1] < MAX_TONE_LENGTH]
-                for t in track:
-                    new_end = t[0]+1+t[-1]
-                    if new_end > end:
-                        end = new_end
-                if self.length < end:
-                    self.length = end
             self.ticks_per_quarter = smallest_note
+        #Calculate new length
+        self.length = 1
+        for track in self.tracks:
+            end = 0
+            for n in track:
+                new_end = n[0]+1+n[-1]
+                if new_end > end:
+                    end = new_end
+            if self.length < end:
+                self.length = end
         #Remove short tracks
         for track in self.tracks:
             conc_over_sound, conc_over_length = track_concurrency(track)
@@ -185,7 +186,7 @@ class Song(object):
         self.track_instrument = new_instruments
         #Optionally remove instruments
         if one_instrument:
-            self.instruments = [DEFAULT_INSTRUMENT]
+            self.instruments = [INSTRUMENT]
             self.track_instrument = [0] * len(self.tracks)
         #Remove silence in the beginning
         start = self.length
@@ -222,7 +223,7 @@ class Song(object):
         song.length, _ = matrix.shape
         song.track_volume = [127]
         song.track_instrument = [0]
-        song.instruments = [DEFAULT_INSTRUMENT]
+        song.instruments = [INSTRUMENT]
         song.tracks = [[]]
         for note in range(0, HIGHEST_NOTE-LOWEST_NOTE):
             last_on = 0

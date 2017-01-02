@@ -150,6 +150,7 @@ $RECYCLE.BIN/
 # Ignore input and output data
 input/*
 output/*
+network/*
 !input/README.md
 !output/README.md
 !output/Csvmidi.exe
