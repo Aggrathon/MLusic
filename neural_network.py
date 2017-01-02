@@ -44,7 +44,7 @@ def build_network(sequence_length=SEQUENCE_LENGTH, dictionary=None):
     gen = tflearn.SequenceGenerator(rnn, dictionary, seq_maxlen=sequence_length, checkpoint_path=OUTPUT_FOLDER+"checkpoints", tensorboard_dir=OUTPUT_FOLDER+"logs")
     return gen
 
-def learn():
+def train():
     seq_len = SEQUENCE_LENGTH
 
     print("Gathering data")
@@ -70,23 +70,18 @@ def generate():
     print("Generating a new sequence")
     sequence = x[random.randint(0, len(x)-1)]
     generated = sequence
-    print(numpy.sum(sequence))
     for i in range(song_len):
         pred = numpy.array(network._predict([sequence]))
         array_to_boolean(pred)
         combine = numpy.zeros((seq_len+i+1, 128))
         combine[:-1, :] = generated
         combine[-1:, :] = pred
-        #print(numpy.sum(pred),numpy.sum(combine)-numpy.sum(generated))
         generated = combine
         sequence = combine[-seq_len:, :]
         if i % 200 == 0 and i != 0:
-            print("{} / {} notes generated".format(i,song_len))
+            print("{} / {} timesteps generated".format(i,song_len))
     song = Song.convert_tone_matrix(generated)
-    from input_analyzer import graph_matrix
-    #graph_matrix(song)
     song.save_to_file()
-    print(generated.shape, numpy.sum(generated), numpy.sum(generated[:16,:]))
     print("Generated song saved to "+OUTPUT_FOLDER+song.name+".csv", song.length)
 
 def array_to_boolean(matrix):
@@ -105,6 +100,6 @@ if __name__ == "__main__":
         if sys.argv[1] == "generate":
             generate()
         else:
-            learn()
+            train()
     else:
-        learn()
+        train()
