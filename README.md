@@ -18,6 +18,7 @@ Before being used for learning the songs are stripped of any percussion, short d
  1. Put your learning midi files in the input folder
  2. Convert them to csv-files using: &nbsp; &nbsp; `python main.py convert input`  
     - If not on Windows you must compile the midi-csv utility first
+ 3. (Optionally) edit the config.py file to modify the training and generation procedures
  4. Train the neural network using: &nbsp; &nbsp; `python main.py train`
  5. Generate a new song using: &nbsp; &nbsp; `python main.py generate`
  6. To see all available options just run: &nbsp; &nbsp; `python main.py help`

@@ -2,8 +2,6 @@
 from sys import argv
 from config import *
 from platform_dependent import convert_inputs, convert_outputs
-from input_analyser import interactive_plot
-from neural_network import generate, train
 
 
 if __name__ == "__main__":
@@ -23,15 +21,18 @@ if __name__ == "__main__":
             convert_outputs()
 
     elif argv[1] == "analyse":
+        from input_analyser import interactive_plot
         interactive_plot()
 
     elif argv[1] == "train":
+        from neural_network import train
         if len(argv) > 2:
             train(argv[2])
         else:
             train()
 
     elif argv[1] == "generate":
+        from neural_network import generate
         if len(argv) > 2:
             generate(argv[2])
         else:

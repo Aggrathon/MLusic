@@ -38,7 +38,7 @@ class Song(object):
 
     @staticmethod
     def read_csv_file(file_name):
-        self = Song(file_name[file_name.find("/")+1:file_name.rfind(".")])
+        self = Song(file_name[file_name.rfind(os.path.sep)+1:file_name.rfind(".")])
         file = open(file_name, "r")
         lines = file.readlines()
         self.ticks_per_quarter = int(lines[0][lines[0].rfind(",")+2:])

@@ -2,6 +2,7 @@
 import platform
 import os
 import subprocess
+import shutil
 from config import *
 from song import Song
 
@@ -89,3 +90,7 @@ def save_and_convert_song(song: Song, play_on_finished=False) -> str:
         subprocess.run([exe, "-v", file_name, file_name[:-4]+".mid"], shell=False)
         os.startfile(file_name[:-4]+".mid")
     return file_name
+
+def copy_file(src: str, dest:str):
+    shutil.copy2(src, dest)
+
