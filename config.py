@@ -4,33 +4,50 @@ Song Cleaning Config
     - These configs will change how the learning data is prepared for training
 """
 # Discard short songs
-MIN_SONG_LENGTH = 50
+MIN_SONG_LENGTH = 400
 # Discard songs with tempos much larger than the standard 500000
 MAX_SONG_TEMPO = 1000000
 # Discard tracks that covers only short portions of the song
 MIN_TRACK_COVERAGE = 0.3
 # Discard tones that lasts forever
-MAX_TONE_LENGTH = 128
+MAX_TONE_LENGTH = 96
 # Discard any song that is not in common time (Common time == 4/4)
-ENFORCE_COMMON_TIME = True
+ENFORCE_COMMON_TIME = False
+# Break overlapping notes of the same tone by adding silence between
+ADD_SILENCE_BEFORE = True
+# Instead of a binary value for notes allow a note to scale in the tone matrix
+ALLOW_NOTE_SCALING = True
 
 
 """
 Song Generation
     - These configs will change how new songs are generated
 """
-SONG_LENGTH = 6000
+# How long should the generated sample be (in ticks, TIME_RESOLUTION == ticks per quarter)
+SONG_LENGTH = 1000
+# The generated track only contains one instrument, which?
+#       0   :   Piano
+#       48  :   String Ensamble
 INSTRUMENT = 0      # 48
-AVERAGE_TONE_DENSITY = 4
+# The generated track width will be between 1 and DENSITY*2
+AVERAGE_TONE_DENSITY = 3
+# Shift the likelyhood that a tone will play by a relative amount
 RANDOMNESS = 0.15    # 0.0 - 0.5
+# The generation seeds will only start at the beginning of the input tracks
 SEED_ONLY_BEGINNING = False
+# Bar length of the generated song
+BAR_LENGTH = 4
+# If the generated song contains notes much longer than a bar
+#  split it up into smaller, bar-sized, chunks
+BREAK_LONG_NOTES = True
 
 
 """
 Neural Network Training
     - These configs change how the network is trained
 """
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.1
+# How many times will the training process iterate through all inputs
 TRAINING_EPOCHS = 2
 VALIDATION_SIZE = 0.12
 
@@ -42,11 +59,11 @@ Neural Network Layout
 # Number of nodes per hidden LSTM layer
 NETWORK_WIDTH = 128
 # Number of hidden LSTM layers
-NETWORK_DEPTH = 6
+NETWORK_DEPTH = 2
 # Number of hidden LSTM layers that have their width doubled (doubled < depth)
-DOUBLE_WIDTH_LAYERS = 2
+DOUBLE_WIDTH_LAYERS = 0
 # Combat overfitting by randomly turning off nodes during training [0.0...1.0[
-DROPOUT = 0.7       # 0.0 - 0.9
+DROPOUT = 0.8       # 0.0 - 0.9
 # How many past timesteps should be used to predict the next one
 SEQUENCE_LENGTH = 192
 # The size of the timesteps, in note notation this would be 1/resolution:th notes
@@ -58,7 +75,7 @@ HIGHEST_NOTE = 104
 #       0   :   No metadata
 #       1   :   Position in bar
 #       2   :   Position in bar and relative time of the whole song
-META_TO_MATRIX = 1
+META_TO_MATRIX = 0
 
 
 """

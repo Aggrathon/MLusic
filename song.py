@@ -193,6 +193,8 @@ class Song(object):
         for t in self.tracks:
             if start > t[0][0]:
                 start = t[0][0]
+        if ADD_SILENCE_BEFORE:
+            start -= 1
         if start > 0:
             self.length -= start
             for track in self.tracks:
@@ -209,17 +211,26 @@ class Song(object):
         self.cleanup(False, TIME_RESOLUTION/2)
         note_range = HIGHEST_NOTE-LOWEST_NOTE
         matrix = numpy.zeros(shape=(self.length, note_range))
-        for track in self.tracks[:self.length]:
+        for track in self.tracks:
+            if ALLOW_NOTE_SCALING:
+                scale, width, _ = track_lengths(track)
+                scale = scale * scale / self.length / width
             for note in track:
-                for i in range(0, note[-1]):
-                    n = note[1] - LOWEST_NOTE
-                    if n >= 0 and n < note_range:
-                        matrix[note[0]+i, n] = 1
+                tone = note[1] - LOWEST_NOTE
+                if tone >= 0 and tone < note_range:
+                    if ADD_SILENCE_BEFORE:
+                        matrix[note[0]-1, tone] = 0
+                    for i in range(0, note[-1]):
+                        if ALLOW_NOTE_SCALING:
+                            matrix[note[0]+i, tone] += scale
+                        else:
+                            matrix[note[0]+i, tone] = 1
         return matrix
 
     @staticmethod
-    def convert_tone_matrix(matrix):
+    def convert_tone_matrix(matrix: numpy.ndarray, bar_length: int=4):
         song = Song('song-{:%Y%m%d%H%M%S}'.format(datetime.datetime.now()))
+        song.bar_length = bar_length
         song.length, _ = matrix.shape
         song.track_volume = [127]
         song.track_instrument = [0]
@@ -231,7 +242,14 @@ class Song(object):
                 state = matrix[time, note]
                 if state == 0:
                     if last_on != time:
-                        song.tracks[0].append([last_on, note+LOWEST_NOTE, 85, time-last_on])
+                        length = time-last_on
+                        if BREAK_LONG_NOTES:
+                            long_note = song.bar_length*song.beat_unit*song.ticks_per_quarter
+                            while length > long_note*2:
+                                song.tracks[0].append([last_on, note+LOWEST_NOTE, 60, long_note])
+                                last_on += long_note
+                                length -= long_note
+                        song.tracks[0].append([last_on, note+LOWEST_NOTE, 90, length])
                     last_on = time + 1
         song.tracks[0].sort(key=lambda n: n[0])
         return song
@@ -240,13 +258,7 @@ class Song(object):
 def track_length(track):
     return track[-1][0]+track[-1][-1]-track[0][0]
 
-def track_concurrency(track, length=0):
-    if len(track) == 0:
-        return 0, 0
-    if length == 0:
-        length = track_length(track)
-        if length == 0:
-            length = 1
+def track_lengths(track):
     start = 0
     end = 0
     coverage = 0
@@ -262,8 +274,19 @@ def track_concurrency(track, length=0):
                 end = new_end
         tone_length += n[-1]
     coverage += end-start
+    return coverage, tone_length, end - track[0][0]
+
+
+def track_concurrency(track, length=0):
+    if len(track) == 0:
+        return 0, 0
+    coverage, tone_length, actual_lengt = track_lengths(track)
     if coverage == 0:
         coverage = 1
+    if length == 0:
+        length = actual_lengt
+        if length == 0:
+            length = 1
     return tone_length/coverage, tone_length/length
 
 

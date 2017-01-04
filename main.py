@@ -9,7 +9,7 @@ if __name__ == "__main__":
         argv.append("help")
 
     if argv[1] == "convert":
-        if len(argv[2]) > 2:
+        if len(argv) > 2:
             if argv[2] == "output":
                 convert_outputs()
             elif argv[2] == "input":
@@ -34,7 +34,10 @@ if __name__ == "__main__":
     elif argv[1] == "generate":
         from neural_network import generate
         if len(argv) > 2:
-            generate(argv[2])
+            amount = 1
+            if len(argv) > 3:
+                amount = int(argv[3])
+            generate(amount, argv[2])
         else:
             generate()
 
@@ -50,6 +53,7 @@ if __name__ == "__main__":
     train [name]     :   Train a neural network with the specified name
     generate         :   Generate a song using the latest neural network
     generate [name]  :   Generate a song using the specified network
+    generate [n] [x] :   Generate x songs using the specified network
     help             :   Display this text"""
               .format(OUTPUT_FOLDER, INPUT_FOLDER))
 

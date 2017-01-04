@@ -13,7 +13,7 @@ from platform_dependent import save_and_convert_song, copy_file
 NOTE_RANGE = HIGHEST_NOTE - LOWEST_NOTE + META_TO_MATRIX
 
 def get_data(scramble_sequences: bool=True) -> ([], []):
-    matrices = [add_meta_to_matrix(s.generate_tone_matrix(), s.length)
+    matrices = [add_meta_to_matrix(s.generate_tone_matrix(), s.length, s.bar_length)
                 for s in read_all_inputs() if s.cleanup()]
     x = []
     y = []
@@ -26,7 +26,7 @@ def get_data(scramble_sequences: bool=True) -> ([], []):
     else:
         return x, y
 
-def add_meta_to_matrix(matrix: numpy.ndarray, length: int) -> numpy.ndarray:
+def add_meta_to_matrix(matrix: numpy.ndarray, length: int, bar_length: int=4) -> numpy.ndarray:
     if META_TO_MATRIX == 0:
         return matrix
     elif META_TO_MATRIX == 1:
@@ -35,7 +35,7 @@ def add_meta_to_matrix(matrix: numpy.ndarray, length: int) -> numpy.ndarray:
         return numpy.hstack((matrix, bar_time))
     elif  META_TO_MATRIX == 2:
         m_len, _ = matrix.shape
-        bar_time = [[i%(TIME_RESOLUTION*4)] for i in range(m_len)]
+        bar_time = [[i%(TIME_RESOLUTION*bar_length)/(TIME_RESOLUTION*bar_length)] for i in range(m_len)]
         rel_time = [[float(i/length)] for i in range(m_len)]
         return numpy.hstack((matrix, bar_time, rel_time))
 
@@ -97,30 +97,35 @@ def train(network_name: str=None):
     network.save(path)
     print("Trained network configuration saved to "+path)
 
-def generate(network_name: str=None):
+def generate(nr_songs: int = 1, network_name: str=None):
     if check_network(network_name, False) == '':
         print("Cannot generate a new song without any network configuration (train the network first)")
         return
     print("Constructing the neural network")
     network = build_network(network_name)
-    print("Gathering Seed")
-    song = random.choice(read_all_inputs())
-    start = 0
-    if not SEED_ONLY_BEGINNING:
-        start = random.randint(0, song.length-SEQUENCE_LENGTH-1)
-    sequence = add_meta_to_matrix(song.generate_tone_matrix()[start:start+SEQUENCE_LENGTH], SONG_LENGTH)
-    generated = sequence
-    print("Song {} used as Seed (starting from {} %)".format(song.name, round(start*100.0/song.length)))
-    print("Generating a new sequence")
-    for i in range(SEQUENCE_LENGTH, SONG_LENGTH):
-        pred = numpy.array(network._predict([sequence]))
-        prediction_to_timestep(pred, i, SONG_LENGTH)
-        generated = numpy.vstack((generated, pred))
-        sequence = generated[-SEQUENCE_LENGTH:, :]
-        if i % 100 == 0 and i != 0:
-            print("{} / {} timesteps generated".format(i, SONG_LENGTH))
-    file_name = save_and_convert_song(Song.convert_tone_matrix(generated))
-    print("Generated song saved to "+file_name)
+    print("Gathering Random Seeds")
+    songs = [s for s in read_all_inputs() if s.cleanup()]
+    for _ in range(nr_songs):
+        song = random.choice(songs)
+        start = 0
+        if not SEED_ONLY_BEGINNING:
+            start = random.randint(0, song.length-SEQUENCE_LENGTH-1)
+        sequence = add_meta_to_matrix(song.generate_tone_matrix()[start:start+SEQUENCE_LENGTH], SONG_LENGTH, BAR_LENGTH)
+        generated = sequence
+        print("Song {} used as Seed (starting from {} %)".format(song.name, round(start*100.0/song.length)))
+        print("Generating a new sequence")
+        for i in range(SEQUENCE_LENGTH, SONG_LENGTH):
+            pred = numpy.array(network._predict([sequence]))
+            prediction_to_timestep(pred, i, SONG_LENGTH)
+            generated = numpy.vstack((generated, pred))
+            sequence = generated[-SEQUENCE_LENGTH:, :]
+            if i % 200 == 0 and i != 0:
+                print("{} / {} timesteps generated".format(i, SONG_LENGTH))
+        song = Song.convert_tone_matrix(generated, BAR_LENGTH)
+        if network_name is not None:
+            song.name = network_name+"-"+song.name
+        file_name = save_and_convert_song(song)
+        print("Generated song saved to "+file_name)
 
 def prediction_to_timestep(matrix: numpy.ndarray, index: int, length: int):
     notes = matrix[0][:-META_TO_MATRIX]
@@ -131,7 +136,7 @@ def prediction_to_timestep(matrix: numpy.ndarray, index: int, length: int):
     if std != 0:
         notes *= (nprand(*notes.shape) - 0.5) * (2*RANDOMNESS)
         over_mean = [i for i in range(notes.shape[0]) if notes[i] > mean]
-        if len(over_mean) > AVERAGE_TONE_DENSITY / 2 and len(over_mean) < AVERAGE_TONE_DENSITY * 2:
+        if len(over_mean) >= 1 / 2 and len(over_mean) < AVERAGE_TONE_DENSITY * 2:
             for i in over_mean:
                 matrix[0, i] = 1
         else:
@@ -140,9 +145,9 @@ def prediction_to_timestep(matrix: numpy.ndarray, index: int, length: int):
             for _, i in over_mean[:AVERAGE_TONE_DENSITY]:
                 matrix[0, i] = 1
     if META_TO_MATRIX == 1:
-        matrix[0, -1] = index%(TIME_RESOLUTION*4)
+        matrix[0, -1] = index%(TIME_RESOLUTION*BAR_LENGTH)/(TIME_RESOLUTION*BAR_LENGTH)
     elif META_TO_MATRIX == 2:
-        matrix[0, -2] = index%(TIME_RESOLUTION*4)
+        matrix[0, -2] = index%(TIME_RESOLUTION*BAR_LENGTH)/(TIME_RESOLUTION*BAR_LENGTH)
         matrix[0, -1] = float(index/length)
 
 
