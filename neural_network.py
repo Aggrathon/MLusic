@@ -41,6 +41,7 @@ def add_meta_to_matrix(matrix: numpy.ndarray, length: int, bar_length: int=4) ->
 
 def build_network(name: str=None):
     rnn = tflearn.input_data(shape=[None, SEQUENCE_LENGTH, NOTE_RANGE])
+    rnn = tflearn.dropout(rnn, DROPOUT)
     for i in range(NETWORK_DEPTH):
         if i < DOUBLE_WIDTH_LAYERS:
             rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))
@@ -48,7 +49,7 @@ def build_network(name: str=None):
             rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))
         rnn = tflearn.dropout(rnn, DROPOUT)
     rnn = tflearn.fully_connected(rnn, NOTE_RANGE, activation='softmax')
-    rnn = tflearn.regression(rnn, optimizer='adadelta', loss='binary_crossentropy', learning_rate=LEARNING_RATE)
+    rnn = tflearn.regression(rnn, optimizer='adadelta', loss='mean_square', learning_rate=LEARNING_RATE)
     sqgen = tflearn.SequenceGenerator(rnn, {i: i for i in range(NOTE_RANGE)}, seq_maxlen=SEQUENCE_LENGTH, \
             checkpoint_path=os.path.join(NETWORK_FOLDER, "checkpoints", ""), tensorboard_dir=os.path.join(NETWORK_FOLDER, "logs"))
     network_path = check_network(name)
@@ -107,10 +108,20 @@ def generate(nr_songs: int = 1, network_name: str=None):
     songs = [s for s in read_all_inputs() if s.cleanup()]
     for _ in range(nr_songs):
         song = random.choice(songs)
+        sequence = song.generate_tone_matrix()
         start = 0
         if not SEED_ONLY_BEGINNING:
-            start = random.randint(0, song.length-SEQUENCE_LENGTH-1)
-        sequence = add_meta_to_matrix(song.generate_tone_matrix()[start:start+SEQUENCE_LENGTH], SONG_LENGTH, BAR_LENGTH)
+            length, _ = sequence.shape
+            start = random.randint(0, length-SEQUENCE_LENGTH-1)
+        sequence = add_meta_to_matrix(sequence[start:start+SEQUENCE_LENGTH, :], SONG_LENGTH, BAR_LENGTH)
+        if SEED_PROCESS:    # Processing seed in order to avoid replication
+            x, y = sequence.shape
+            for i in range(y):
+                for j in range(x):
+                    if sequence[j, i] > 0:
+                        if (j > 0 and sequence[j-1, i] == 0) and (j < x-1 and sequence[j+1, i] == 0):
+                            sequence[j, i] = 0
+            sequence = numpy.flipud(sequence)
         generated = sequence
         print("Song {} used as Seed (starting from {} %)".format(song.name, round(start*100.0/song.length)))
         print("Generating a new sequence")

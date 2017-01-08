@@ -1,7 +1,7 @@
 
 import os
 import datetime
-from math import log2
+from math import log2, floor
 import numpy
 from config import *
 
@@ -153,9 +153,9 @@ class Song(object):
             for track in self.tracks:
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
-                    t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
+                    t[-1] = floor(t[-1]*smallest_note/self.ticks_per_quarter)
                 # Remove too short or too long notes
-                track = [n for n in track if n[2] > 0 and n[-1] > 1 and n[-1] < MAX_TONE_LENGTH]
+                track = [n for n in track if n[2] > 0 and n[-1] > 0 and n[-1] < MAX_TONE_LENGTH]
             self.ticks_per_quarter = smallest_note
         #Calculate new length
         self.length = 1
