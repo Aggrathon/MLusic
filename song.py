@@ -218,13 +218,18 @@ class Song(object):
             for note in track:
                 tone = note[1] - LOWEST_NOTE
                 if tone >= 0 and tone < note_range:
-                    if ADD_SILENCE_BEFORE:
-                        matrix[note[0]-1, tone] = 0
                     for i in range(0, note[-1]):
                         if ALLOW_NOTE_SCALING:
                             matrix[note[0]+i, tone] += scale
                         else:
                             matrix[note[0]+i, tone] = 1
+        if ADD_SILENCE_BEFORE:
+            for track in self.tracks:
+                for note in track:
+                    tone = note[1] - LOWEST_NOTE
+                    if tone >= 0 and tone < note_range:
+                        matrix[note[0]-1, tone] = 0
+
         return matrix
 
     @staticmethod
