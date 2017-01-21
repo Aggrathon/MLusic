@@ -9,7 +9,7 @@ from song import *
 from config import *
 from platform_dependent import save_and_convert_song, copy_file
 
-NOTE_RANGE = HIGHEST_NOTE - LOWEST_NOTE + META_TO_MATRIX
+NOTE_RANGE = numpy.sum([td['highest_note'] - td['lowest_note'] for td in TRACK_TO_DATA]) + META_TO_MATRIX
 
 def get_data(scramble_sequences: bool=True) -> ([], []):
     matrices = [add_meta_to_matrix(s.generate_tone_matrix(), s.length, s.bar_length)
@@ -54,7 +54,7 @@ def build_network(name: str=None):
     rnn = tflearn.input_data(shape=[None, SEQUENCE_LENGTH, NOTE_RANGE])
     rnn = tflearn.dropout(rnn, DROPOUT)
     for i in range(NETWORK_DEPTH):
-        if i < DOUBLE_WIDTH_LAYERS:
+        if i < DOUBLE_WIDTH_LAYERS or i >= NETWORK_DEPTH+DOUBLE_WIDTH_LAYERS:
             rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))
         else:
             rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))

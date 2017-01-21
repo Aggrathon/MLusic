@@ -28,7 +28,7 @@ SONG_LENGTH = 1000
 # The generated track only contains one instrument, which?
 #       0   :   Piano
 #       48  :   String Ensamble
-INSTRUMENT = 0      # 48
+INSTRUMENT = [0,48]
 # The generated track width will be between 1 and DENSITY*2
 AVERAGE_TONE_DENSITY = 3
 # Shift the likelyhood that a tone will play by a relative amount
@@ -72,8 +72,7 @@ SEQUENCE_LENGTH = 256
 # The size of the timesteps, in note notation this would be 1/resolution:th notes
 TIME_RESOLUTION = 8
 # Midi Note Range
-LOWEST_NOTE = 24
-HIGHEST_NOTE = 104
+TRACK_TO_DATA = [{"lowest_note":24, "highest_note":104, "selector": lambda track: True}]
 # Should additional metadata be added to the data?
 #       0   :   No metadata
 #       1   :   Position in bar

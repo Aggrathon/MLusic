@@ -186,7 +186,7 @@ class Song(object):
         self.track_instrument = new_instruments
         #Optionally remove instruments
         if one_instrument:
-            self.instruments = [INSTRUMENT]
+            self.instruments = INSTRUMENT[:1]
             self.track_instrument = [0] * len(self.tracks)
         #Remove silence in the beginning
         start = self.length
@@ -209,28 +209,44 @@ class Song(object):
 
     def generate_tone_matrix(self):
         self.cleanup(False, TIME_RESOLUTION/2)
-        note_range = HIGHEST_NOTE-LOWEST_NOTE
-        matrix = numpy.zeros(shape=(self.length, note_range))
+        matrix = numpy.zeros(shape=(self.length, numpy.sum([td['highest_note'] - td['lowest_note'] for td in TRACK_TO_DATA])))
         for track in self.tracks:
+            offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track)
             if ALLOW_NOTE_SCALING:
                 scale, width, _ = track_lengths(track)
                 scale = scale * scale / self.length / width
             for note in track:
-                tone = note[1] - LOWEST_NOTE
+                tone = note[1] - lowest_note
                 if tone >= 0 and tone < note_range:
                     for i in range(0, note[-1]):
                         if ALLOW_NOTE_SCALING:
-                            matrix[note[0]+i, tone] += scale
+                            matrix[note[0]+i, tone+offset] += scale
                         else:
-                            matrix[note[0]+i, tone] = 1
+                            matrix[note[0]+i, tone+offset] = 1
         if ADD_SILENCE_BEFORE:
             for track in self.tracks:
+                offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track)
                 for note in track:
-                    tone = note[1] - LOWEST_NOTE
+                    tone = note[1] - lowest_note
                     if tone >= 0 and tone < note_range:
-                        matrix[note[0]-1, tone] = 0
+                        matrix[note[0]-1, tone+offset] = 0
 
         return matrix
+    
+    @staticmethod
+    def __get_track_matrix_numbers__(track):
+        offset = 0
+        lowest_note = 0
+        note_range = 128
+        for td in TRACK_TO_DATA:
+            if td['selector'](track):
+                lowest_note = td['lowest_note']
+                note_range = td['highest_note'] - lowest_note
+                break
+            else:
+                offset += td['highest_note'] - td['lowest_note']
+        return offset, lowest_note, note_range
+
 
     @staticmethod
     def convert_tone_matrix(matrix: numpy.ndarray, bar_length: int=4):
@@ -238,25 +254,30 @@ class Song(object):
         song.bar_length = bar_length
         song.length, _ = matrix.shape
         song.track_volume = [127]
-        song.track_instrument = [0]
-        song.instruments = [INSTRUMENT]
-        song.tracks = [[]]
-        for note in range(0, HIGHEST_NOTE-LOWEST_NOTE):
-            last_on = 0
-            for time in range(0, song.length):
-                state = matrix[time, note]
-                if state == 0:
-                    if last_on != time:
-                        length = time-last_on
-                        if BREAK_LONG_NOTES:
-                            long_note = song.bar_length*song.beat_unit*song.ticks_per_quarter
-                            while length > long_note*2:
-                                song.tracks[0].append([last_on, note+LOWEST_NOTE, 60, long_note])
-                                last_on += long_note
-                                length -= long_note
-                        song.tracks[0].append([last_on, note+LOWEST_NOTE, 90, length])
-                    last_on = time + 1
-        song.tracks[0].sort(key=lambda n: n[0])
+        song.track_instrument = [0 for t in TRACK_TO_DATA]
+        song.instruments = INSTRUMENT[:len(TRACK_TO_DATA)]
+        song.tracks = [[] for t in TRACK_TO_DATA]
+        offset = 0
+        for i, td in enumerate(TRACK_TO_DATA):
+            lowest_note = td['lowest_note']
+            note_range = td['highest_note'] - lowest_note
+            for note in range(note_range):
+                last_on = 0
+                for time in range(0, song.length):
+                    state = matrix[time, offset+note]
+                    if state == 0:
+                        if last_on != time:
+                            length = time-last_on
+                            if BREAK_LONG_NOTES:
+                                long_note = song.bar_length*song.beat_unit*song.ticks_per_quarter
+                                while length > long_note*2:
+                                    song.tracks[i].append([last_on, note+lowest_note, 60, long_note])
+                                    last_on += long_note
+                                    length -= long_note
+                            song.tracks[i].append([last_on, note+lowest_note, 90, length])
+                        last_on = time + 1
+        for track in song.tracks:
+            track.sort(key=lambda n: n[0])
         return song
 
 

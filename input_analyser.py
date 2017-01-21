@@ -10,7 +10,7 @@ from platform_dependent import save_and_convert_song
 from config import *
 
 
-SONG_NAME = "sarajevo" # avemar~1 to_town rudolph carolbel sarajevo
+SONG_NAME = "sarajevo"
 
 def histogram(data, title, bins="auto", show_mean=True):
     plt.clf()
@@ -25,7 +25,7 @@ def histogram(data, title, bins="auto", show_mean=True):
     plt.show()
 
 def graph_song_length(songs):
-    histogram([s.length/s.ticks_per_quarter for s in songs], "Song Lengths")
+    histogram([s.length/s.ticks_per_quarter/4*TIME_RESOLUTION for s in songs], "Song Lengths")
 
 def graph_song_length_raw(songs):
     histogram([s.length for s in songs], "Song Raw Lengths")
@@ -119,6 +119,10 @@ def graph_track_width_mean(songs):
             tracks_mean_width.append(mean_concurrent/len(t))
     histogram(tracks_mean_width, "Track Mean Width", [i*0.5 for i in range(0, 12)], False)
 
+def graph_track_mean_note(songs):
+    mean = [np.mean([n[1] for n in t]) for s in songs for t in s.tracks]
+    histogram(mean, "Track Mean Pitch", range(20,100,1))
+
 def graph_matrix(song):
     matrix = song.generate_tone_matrix()
     plt.clf()
@@ -142,6 +146,12 @@ def interactive_plot(cleanup=False):
         print("Cleaning input")
         for s in songs:
             s.cleanup(False)
+    def keep_low_pitch():
+        for s in songs:
+            s.tracks = [t for t in s.tracks if np.mean([n[1] for n in t]) < 46.5]
+    def discard_low_pitch():
+        for s in songs:
+            s.tracks = [t for t in s.tracks if np.mean([n[1] for n in t]) > 46.5]
     if cleanup:
         clean_data()
 
@@ -150,6 +160,8 @@ def interactive_plot(cleanup=False):
     ttk.Label(window, text="Select Data:").pack(fill='x')
     ttk.OptionMenu(window, tkinter.StringVar(), *(["All songs"]+[s.name for s in songs]), command=select_data).pack(fill='x')
     ttk.Button(window, text="Cleanup songs", command=clean_data).pack(fill='x')
+    ttk.Button(window, text="Keep only low pitch tracks", command=keep_low_pitch).pack(fill='x')
+    ttk.Button(window, text="Discard low pitch tracks", command=discard_low_pitch).pack(fill='x')
     ttk.Label(window, text="Export: (Selected/First Song)").pack(fill='x')
     ttk.Button(window, text="Export Cleaned", command=lambda: file_export(False, songs[0])).pack(fill='x')
     ttk.Button(window, text="Export Matrixed", command=lambda: file_export(True, songs[0])).pack(fill='x')
@@ -169,6 +181,7 @@ def interactive_plot(cleanup=False):
         ("Note Lengths in Ticks", graph_notes_length_ticks),
         ("Note Velocities", graph_note_velocity),
         ("Track Counts", graph_track_num),
+        ("Track Mean Pitch", graph_track_mean_note),
         ("Track Lengths", graph_track_len),
         ("Track Max Widths", graph_track_width_max),
         ("Track Mean Widths", graph_track_width_mean),
