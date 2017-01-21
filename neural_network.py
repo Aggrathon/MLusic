@@ -5,7 +5,6 @@ import sys
 import numpy
 from numpy.random import rand as nprand
 import tflearn
-from tflearn.data_utils import shuffle
 from song import *
 from config import *
 from platform_dependent import save_and_convert_song, copy_file
@@ -25,6 +24,18 @@ def get_data(scramble_sequences: bool=True) -> ([], []):
         return shuffle(x, y)
     else:
         return x, y
+
+def shuffle(arr1, arr2):
+    assert len(arr1) == len(arr2)
+    for i in range(len(arr1)):
+        rnd = random.randrange(i, len(arr1))
+        tmp = arr1[i]
+        arr1[i] = arr1[rnd]
+        arr1[rnd] = tmp
+        tmp = arr2[i]
+        arr2[i] = arr2[rnd]
+        arr2[rnd] = tmp
+    return arr1, arr2
 
 def add_meta_to_matrix(matrix: numpy.ndarray, length: int, bar_length: int=4) -> numpy.ndarray:
     if META_TO_MATRIX == 0:
@@ -51,7 +62,7 @@ def build_network(name: str=None):
     rnn = tflearn.fully_connected(rnn, NOTE_RANGE, activation='softmax')
     rnn = tflearn.regression(rnn, optimizer='adadelta', loss='mean_square', learning_rate=LEARNING_RATE)
     sqgen = tflearn.SequenceGenerator(rnn, {i: i for i in range(NOTE_RANGE)}, seq_maxlen=SEQUENCE_LENGTH, \
-            checkpoint_path=os.path.join(NETWORK_FOLDER, "checkpoints", ""), tensorboard_dir=os.path.join(NETWORK_FOLDER, "logs"))
+            checkpoint_path=os.path.join(NETWORK_FOLDER, "checkpoint", ""), tensorboard_dir=os.path.join(NETWORK_FOLDER, "logs"))
     network_path = check_network(name)
     if network_path != '':
         sqgen.load(network_path)
