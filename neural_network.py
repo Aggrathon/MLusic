@@ -1,4 +1,4 @@
-
+import gc
 import datetime
 import random
 import sys
@@ -13,7 +13,7 @@ NOTE_RANGE = numpy.sum([td['highest_note'] - td['lowest_note'] for td in TRACK_T
 
 def get_data(scramble_sequences: bool=True) -> ([], []):
     matrices = [add_meta_to_matrix(s.generate_tone_matrix(), s.length, s.bar_length)
-                for s in read_all_inputs() if s.cleanup()]
+                for s in read_all_inputs() if s.cleanup(False)]
     x = []
     y = []
     for m in matrices:
@@ -52,14 +52,14 @@ def add_meta_to_matrix(matrix: numpy.ndarray, length: int, bar_length: int=4) ->
 
 def build_network(name: str=None):
     rnn = tflearn.input_data(shape=[None, SEQUENCE_LENGTH, NOTE_RANGE])
-    rnn = tflearn.dropout(rnn, DROPOUT)
+    rnn = tflearn.dropout(rnn, DROPOUT, name="Dropout_pre")
     for i in range(NETWORK_DEPTH):
         if i < DOUBLE_WIDTH_LAYERS or i >= NETWORK_DEPTH+DOUBLE_WIDTH_LAYERS:
-            rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))
+            rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1), name="LSTM"+str(i))
         else:
-            rnn = tflearn.lstm(rnn, NETWORK_WIDTH*2, return_seq=(i != NETWORK_DEPTH-1))
-        rnn = tflearn.dropout(rnn, DROPOUT)
-    rnn = tflearn.fully_connected(rnn, NOTE_RANGE, activation='softmax')
+            rnn = tflearn.lstm(rnn, NETWORK_WIDTH, return_seq=(i != NETWORK_DEPTH-1), name="LSTM"+str(i))
+        rnn = tflearn.dropout(rnn, DROPOUT, name="Dropout"+str(i))
+    rnn = tflearn.fully_connected(rnn, NOTE_RANGE, activation='softmax', name="FullyConnected")
     rnn = tflearn.regression(rnn, optimizer='adadelta', loss='mean_square', learning_rate=LEARNING_RATE)
     sqgen = tflearn.SequenceGenerator(rnn, {i: i for i in range(NOTE_RANGE)}, seq_maxlen=SEQUENCE_LENGTH, \
             checkpoint_path=os.path.join(NETWORK_FOLDER, "checkpoint", ""), tensorboard_dir=os.path.join(NETWORK_FOLDER, "logs"))
@@ -105,6 +105,7 @@ def train(network_name: str=None):
     print("Saving a copy of the current config")
     copy_file("config.py", path+"-config.py")
     print("Starting the learning process")
+    gc.collect()
     network.fit(x, y, n_epoch=TRAINING_EPOCHS, show_metric=True, snapshot_epoch=True, validation_set=VALIDATION_SIZE)
     network.save(path)
     print("Trained network configuration saved to "+path)

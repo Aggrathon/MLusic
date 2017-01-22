@@ -60,7 +60,7 @@ Neural Network Layout
     - Changing these will require you to recreate and retrain any existing network
 """
 # Number of nodes per hidden LSTM layer
-NETWORK_WIDTH = 80
+NETWORK_WIDTH = 160
 # Number of hidden LSTM layers
 NETWORK_DEPTH = 3
 # Number of hidden LSTM layers that have their width doubled (doubled < depth)

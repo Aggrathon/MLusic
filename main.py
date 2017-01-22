@@ -21,8 +21,8 @@ if __name__ == "__main__":
             convert_outputs()
 
     elif argv[1] == "analyse":
-        from input_analyser import interactive_plot
-        interactive_plot()
+        from input_analyser import Analyzer
+        Analyzer().interactive_plot()
 
     elif argv[1] == "train":
         from neural_network import train

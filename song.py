@@ -126,15 +126,18 @@ class Song(object):
             for note in track:
                 notes.append((note[0], "{}, {}, Note_on_c, {}, {}, {}\n".format(track_nr, note[0], self.track_instrument[i], note[1], note[2])))
                 notes.append((note[0]+note[-1], "{}, {}, Note_off_c, {}, {}, 0\n".format(track_nr, note[0]+note[-1], self.track_instrument[i], note[1])))
-            notes.sort()
-            for _, line in notes:
-                file.write(line)
-            file.write("{}, {}, End_track\n".format(track_nr, notes[-1][0]+1))
+            if len(notes) > 0:
+                notes.sort()
+                for _, line in notes:
+                    file.write(line)
+                file.write("{}, {}, End_track\n".format(track_nr, notes[-1][0]+1))
+            else:
+                file.write("{}, {}, End_track\n".format(track_nr, 1))
         file.write("0, 0, End_of_file\n")
         file.close()
         return file_name
 
-    def cleanup(self, one_instrument=True, smallest_note=8):
+    def cleanup(self, one_instrument=False, smallest_note=8):
         #Remove percussion
         for i, track in enumerate(self.tracks):
             instrument = self.instruments[self.track_instrument[i]]
@@ -188,6 +191,15 @@ class Song(object):
         if one_instrument:
             self.instruments = INSTRUMENT[:1]
             self.track_instrument = [0] * len(self.tracks)
+        else:
+            ninst = []
+            for i, ti in enumerate(self.track_instrument):
+                if self.instruments[ti] in ninst:
+                    self.track_instrument[i] = ninst.index(self.instruments[ti])
+                else:
+                    self.track_instrument[i] = len(ninst)
+                    ninst.append(self.instruments[ti])
+            self.instruments = ninst
         #Remove silence in the beginning
         start = self.length
         for t in self.tracks:
@@ -210,8 +222,8 @@ class Song(object):
     def generate_tone_matrix(self):
         self.cleanup(False, TIME_RESOLUTION/2)
         matrix = numpy.zeros(shape=(self.length, numpy.sum([td['highest_note'] - td['lowest_note'] for td in TRACK_TO_DATA])))
-        for track in self.tracks:
-            offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track)
+        for i, track in enumerate(self.tracks):
+            offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track, self.instruments[self.track_instrument[i]])
             if ALLOW_NOTE_SCALING:
                 scale, width, _ = track_lengths(track)
                 scale = scale * scale / self.length / width
@@ -224,22 +236,21 @@ class Song(object):
                         else:
                             matrix[note[0]+i, tone+offset] = 1
         if ADD_SILENCE_BEFORE:
-            for track in self.tracks:
-                offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track)
+            for i, track in enumerate(self.tracks):
+                offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track, self.instruments[self.track_instrument[i]])
                 for note in track:
                     tone = note[1] - lowest_note
                     if tone >= 0 and tone < note_range:
                         matrix[note[0]-1, tone+offset] = 0
-
         return matrix
-    
+
     @staticmethod
-    def __get_track_matrix_numbers__(track):
+    def __get_track_matrix_numbers__(track, instrument):
         offset = 0
         lowest_note = 0
         note_range = 128
         for td in TRACK_TO_DATA:
-            if td['selector'](track):
+            if td['selector'](track, instrument):
                 lowest_note = td['lowest_note']
                 note_range = td['highest_note'] - lowest_note
                 break
@@ -276,6 +287,7 @@ class Song(object):
                                     length -= long_note
                             song.tracks[i].append([last_on, note+lowest_note, 90, length])
                         last_on = time + 1
+            offset += note_range
         for track in song.tracks:
             track.sort(key=lambda n: n[0])
         return song

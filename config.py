@@ -8,9 +8,9 @@ MIN_SONG_LENGTH = 400
 # Discard songs with tempos much larger than the standard 500000
 MAX_SONG_TEMPO = 1000000
 # Discard tracks that covers only short portions of the song
-MIN_TRACK_COVERAGE = 0.3
+MIN_TRACK_COVERAGE = 0.2
 # Discard tones that lasts forever
-MAX_TONE_LENGTH = 64
+MAX_TONE_LENGTH = 96
 # Discard any song that is not in common time (Common time == 4/4)
 ENFORCE_COMMON_TIME = True
 # Break overlapping notes of the same tone by adding silence between
@@ -31,9 +31,10 @@ SONG_LENGTH = 1000
 #       33  :   Electric Bass
 #       30  :   Distortion Guitar
 #       29  :   Overdriven Guitar
-INSTRUMENT = [30,33]
+#       53  :   Voice Oohs
+INSTRUMENT = [33,29,53]
 # The generated track width will be between 1 and DENSITY*2
-AVERAGE_TONE_DENSITY = 3
+AVERAGE_TONE_DENSITY = 4
 # Shift the likelyhood that a tone will play by a relative amount
 RANDOMNESS = 0.15    # 0.0 - 0.5
 # Bar length of the generated song
@@ -54,7 +55,7 @@ Neural Network Training
 """
 LEARNING_RATE = 0.1
 # How many times will the training process iterate through all inputs
-TRAINING_EPOCHS = 3
+TRAINING_EPOCHS = 4
 VALIDATION_SIZE = 0.12
 
 
@@ -64,25 +65,25 @@ Neural Network Layout
 """
 # Number of nodes per hidden LSTM layer
 # (base this number on the sum of track widths, see below)
-NETWORK_WIDTH = 100
+NETWORK_WIDTH = 152
 # Number of hidden LSTM layers
 NETWORK_DEPTH = 3
 # Number of hidden LSTM layers that have their width doubled (doubled < depth, negative for reverse selection)
-DOUBLE_WIDTH_LAYERS = 0
+DOUBLE_WIDTH_LAYERS = 1
 # Combat overfitting by randomly turning off nodes during training [0.0...1.0[
 DROPOUT = 0.7       # 0.0 - 0.9
 # How many past timesteps should be used to predict the next one
-SEQUENCE_LENGTH = 128
+SEQUENCE_LENGTH = 192
 # The size of the timesteps, in note notation this would be 1/resolution:th notes
-TIME_RESOLUTION = 8
+TIME_RESOLUTION = 4
 # You can configure the network to generate multiple tracks (with different instruments, see above)
 # Each track has a different tone range
 # The selector function determines if a track in the input belongs to the output track
 # The last output track should have a selector that always returns true
-import numpy as np
 TRACK_TO_DATA = [
-    {"lowest_note":24, "highest_note":64, "selector": lambda track: np.mean([n[1] for n in track]) < 46.5}, # acccomp
-    {"lowest_note":35, "highest_note":95, "selector": lambda track: True}                                   # melody
+    {"lowest_note":28, "highest_note":58, "selector": lambda track, instrument: instrument > 31 and instrument < 40 },  # Bass
+    {"lowest_note":35, "highest_note":95, "selector": lambda track, instrument: instrument > 24 and instrument < 32 },  # Guitar
+    {"lowest_note":35, "highest_note":95, "selector": lambda track, instrument: True}
 ]
 # Should additional metadata be added to the data?
 #       0   :   No metadata
