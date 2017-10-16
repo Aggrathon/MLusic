@@ -9,7 +9,7 @@ A Generative Adverserial neural Network for generating audio files.
 
 
  ## TODO
- - [ ] Read audio files
+ - [x] Read audio files
  - [ ] Neural Network
  - [ ] Output
  - [ ] Examples
