@@ -3,7 +3,6 @@ Create a LSTM neural network that can be trained to generate music.
 MIDI files are used both as input and output. Since there might be no way of separating 
 melody from "decorations" and accompaniment some cleaning is done before learning (like removing percussion).
 This means the final result is  highly dependent on the learning material.
-And overfitting with a large network is a real threat.
 
 ## Examples
 The examples folder contains a sample trained network and some generated songs.
@@ -11,7 +10,6 @@ The examples folder contains a sample trained network and some generated songs.
 ## Dependencies
  - Python 3
  - Tensorflow
- - TFLearn &nbsp; ([http://tflearn.org/](http://tflearn.org/))
  - MidiCsv &nbsp; ([http://www.fourmilab.ch/webtools/midicsv/](http://www.fourmilab.ch/webtools/midicsv/))
  - Numpy
 
