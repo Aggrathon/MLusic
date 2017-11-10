@@ -1,11 +1,14 @@
 
 import os
-import datetime
-from math import log2, floor
-import numpy
-from config import *
+from math import log2
+import numpy as np
+from config import INPUT_FOLDER, OUTPUT_FOLDER
+
 
 def reduce_instrument(instr):
+    """
+        Reduces the range of instuments
+    """
     if instr > 31 and instr < 33: #Bass
         return 40
     if instr > 24 and instr < 29:  # Guitar
@@ -15,15 +18,43 @@ def reduce_instrument(instr):
     return instr
 
 def expand_instument(instr):
+    """
+        Opposite of reduce_instuments
+    """
     return instr
 
 
 class Note():
+    """
+        Class for containing a note in a sequence
+    """
     def __init__(self, instrument=0, tone=0, length=0, delay=0):
         self.instrument = instrument
         self.tone = tone
         self.length = length
         self.delay = delay
+    
+    def to_vector(self, max_instr=10, max_tone=120):
+        """
+            Get the vector representing the note
+        """
+        vec = np.zeros(max_instr+max_tone+2, np.float)
+        vec[-2] = float(self.length)
+        vec[-1] = float(self.delay)
+        vec[self.instrument] = 1.0
+        vec[max_instr+self.tone] = 1.0
+
+    @classmethod
+    def from_vector(cls, vector, max_instr=10, max_tone=120):
+        """
+            Convert a matrix into a note
+        """
+        return Note(
+            np.argmax(vector[:max_instr]),
+            np.argmax(vector[max_instr:max_instr+max_tone]),
+            int(vector[-2]),
+            int(vector[-1])
+        )
 
 
 class Song(object):
@@ -94,11 +125,11 @@ class Song(object):
         instument_set = set()
         for note in self.notes:
             instument_set.add(note.instrument)
-        instuments = {ins: i for i, ins in enumerate(instument_set)}
+        instruments = {ins: i for i, ins in enumerate(instument_set)}
         if file_name is None:
             file_name = os.path.join(OUTPUT_FOLDER, self.name+".csv")
         with open(file_name, "w") as file:
-            file.write("0, 0, Header, 1, {}, {}\n".format(len(self.tracks)+1, self.ticks_per_quarter))
+            file.write("0, 0, Header, 1, {}, {}\n".format(2, self.ticks_per_quarter))
             file.write("1, 0, Start_track\n")
             file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit))))
             file.write("1, 0, Tempo, {}\n".format(self.tempo))
@@ -140,7 +171,7 @@ class Song(object):
         for note in self.notes:
             time += note.delay
         self.length = time + self.notes[-1].length
-        
+
 
 def read_all_inputs():
     return [Song.read_csv_file(os.path.join(INPUT_FOLDER, s))
