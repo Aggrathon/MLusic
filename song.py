@@ -4,6 +4,7 @@ import datetime
 from math import log2, floor
 import numpy
 from config import *
+from multiprocessing import Pool
 
 PERCUSSION_INSTRUMENT = -10
 
@@ -156,7 +157,7 @@ class Song(object):
             for track in self.tracks:
                 for t in track:
                     t[0] = round(t[0]*smallest_note/self.ticks_per_quarter)
-                    t[-1] = floor(t[-1]*smallest_note/self.ticks_per_quarter)
+                    t[-1] = round(t[-1]*smallest_note/self.ticks_per_quarter)
                 # Remove too short or too long notes
                 track = [n for n in track if n[2] > 0 and n[-1] > 0 and n[-1] < MAX_TONE_LENGTH]
             self.ticks_per_quarter = smallest_note
@@ -220,7 +221,7 @@ class Song(object):
             (not ENFORCE_COMMON_TIME or (self.bar_length == 4 and self.beat_unit == 4))
 
     def generate_tone_matrix(self):
-        self.cleanup(False, TIME_RESOLUTION/2)
+        self.cleanup(False, TIME_RESOLUTION)
         matrix = numpy.zeros(shape=(self.length, numpy.sum([td['highest_note'] - td['lowest_note'] for td in TRACK_TO_DATA])))
         for i, track in enumerate(self.tracks):
             offset, lowest_note, note_range = Song.__get_track_matrix_numbers__(track, self.instruments[self.track_instrument[i]])
@@ -286,7 +287,7 @@ class Song(object):
                                     last_on += long_note
                                     length -= long_note
                             song.tracks[i].append([last_on, note+lowest_note, 90, length])
-                        last_on = time + 1
+                        last_on = time
             offset += note_range
         for track in song.tracks:
             track.sort(key=lambda n: n[0])
@@ -327,7 +328,10 @@ def track_concurrency(track, length=0):
             length = 1
     return tone_length/coverage, tone_length/length
 
-
+def __read_all_inputs__(song):
+    return Song.read_csv_file(song)
 def read_all_inputs():
-    return [Song.read_csv_file(os.path.join(INPUT_FOLDER, s))
-            for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
+    songs = Pool().map(__read_all_inputs__, [os.path.join(INPUT_FOLDER, s)
+            for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")])
+    print("Number of songs:", len(songs))
+    return songs

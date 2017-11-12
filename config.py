@@ -8,9 +8,9 @@ MIN_SONG_LENGTH = 400
 # Discard songs with tempos much larger than the standard 500000
 MAX_SONG_TEMPO = 1000000
 # Discard tracks that covers only short portions of the song
-MIN_TRACK_COVERAGE = 0.2
+MIN_TRACK_COVERAGE = 0.0
 # Discard tones that lasts forever
-MAX_TONE_LENGTH = 96
+MAX_TONE_LENGTH = 960
 # Discard any song that is not in common time (Common time == 4/4)
 ENFORCE_COMMON_TIME = True
 # Break overlapping notes of the same tone by adding silence between
@@ -73,9 +73,9 @@ DOUBLE_WIDTH_LAYERS = 1
 # Combat overfitting by randomly turning off nodes during training [0.0...1.0[
 DROPOUT = 0.7       # 0.0 - 0.9
 # How many past timesteps should be used to predict the next one
-SEQUENCE_LENGTH = 192
+SEQUENCE_LENGTH = 2048
 # The size of the timesteps, in note notation this would be 1/resolution:th notes
-TIME_RESOLUTION = 4
+TIME_RESOLUTION = 8
 # You can configure the network to generate multiple tracks (with different instruments, see above)
 # Each track has a different tone range
 # The selector function determines if a track in the input belongs to the output track

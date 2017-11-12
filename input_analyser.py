@@ -143,6 +143,13 @@ class Analyzer(object):
         plt.title("Note Matrix for "+self.songs[0].name)
         plt.show()
 
+    def graph_rematrix(self):
+        matrix = Song.convert_tone_matrix(self.songs[0].generate_tone_matrix()).generate_tone_matrix()
+        plt.clf()
+        plt.imshow(matrix.T, cmap='Greys', aspect='auto', interpolation='none')
+        plt.title("Note Matrix for "+self.songs[0].name)
+        plt.show()
+
     def graph_matrix_tone_width(self):
         means = []
         for song in self.songs:
@@ -219,6 +226,7 @@ class Analyzer(object):
         ttk.Button(window, text="Export Cleaned", command=lambda: file_export(self.songs[0])).pack(fill='x')
         ttk.Button(window, text="Export Matrixed", command=lambda: file_export(self.songs[0], True)).pack(fill='x')
         ttk.Button(window, text="Show Matrix", command=self.graph_matrix).pack(fill='x')
+        ttk.Button(window, text="Show ReMatrix", command=self.graph_rematrix).pack(fill='x')
 
         ttk.Label(window, text="Select Graph:").pack(fill='x')
         graphs = [
