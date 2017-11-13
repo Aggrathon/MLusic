@@ -10,18 +10,23 @@ def reduce_instrument(instr):
         Reduces the range of instuments
     """
     if instr > 31 and instr < 33: #Bass
-        return 40
+        return 1
     if instr > 24 and instr < 29:  # Guitar
-        return 32
-    if instr == 10:
-        return 10
-    return instr
+        return 2
+    if instr == 0:
+        return 0
+    return 3
 
 def expand_instument(instr):
     """
         Opposite of reduce_instuments
     """
-    return instr
+    if instr == 1:
+        return 40
+    if instr == 2:
+        return 32
+    if instr == 3:
+        return 53
 
 
 class Note():
@@ -43,6 +48,7 @@ class Note():
         vec[-1] = float(self.delay)
         vec[self.instrument] = 1.0
         vec[max_instr+self.tone] = 1.0
+        return vec
 
     @classmethod
     def from_vector(cls, vector, max_instr=10, max_tone=120):
@@ -81,6 +87,7 @@ class Song(object):
 
             notes = []
             instruments = list(0 for _ in range(100))
+            instruments[10] = 0
 
             for line in lines:
                 split = line.split(", ")
@@ -125,6 +132,7 @@ class Song(object):
         instument_set = set()
         for note in self.notes:
             instument_set.add(note.instrument)
+        instument_set.remove(0)
         instruments = {ins: i for i, ins in enumerate(instument_set)}
         if file_name is None:
             file_name = os.path.join(OUTPUT_FOLDER, self.name+".csv")
@@ -141,8 +149,9 @@ class Song(object):
             time = 0
             for note in self.notes:
                 time += note.delay
-                notelist.append((instuments[note.instrument], time, note.tone, True))
-                notelist.append((instuments[note.instrument], time+note.length, note.tone, False))
+                if note.instrument != 0:
+                    notelist.append((instruments[note.instrument], time, note.tone, True))
+                    notelist.append((instruments[note.instrument], time+note.length, note.tone, False))
             notelist.sort(key=lambda n: n[1])
             for note in notelist:
                 if note[-1]:
@@ -158,7 +167,7 @@ class Song(object):
             for note in self.notes:
                 note.instrument = reduce_instrument(note.instrument)
         self.notes = [n for n in self.notes if \
-            not (remove_percussion and n.instrument == 10) and \
+            not (remove_percussion and n.instrument == 0) and \
             not n.length < minimum_note_length]
         self.instruments = set(n.instrument for n in self.notes)
 
@@ -176,3 +185,11 @@ class Song(object):
 def read_all_inputs():
     return [Song.read_csv_file(os.path.join(INPUT_FOLDER, s))
             for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
+
+def get_all_vectors():
+    print("Converting csvs to songs")
+    songs = read_all_inputs()
+    for s in songs:
+        s.import_cleanup()
+    print("Converting notes to vectors")
+    return np.asarray([note.to_vector() for song in songs for note in song.notes], np.float)
