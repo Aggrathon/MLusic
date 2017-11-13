@@ -3,7 +3,7 @@
 """
 
 import tensorflow as tf
-from config import NETWORK_FOLDER
+from config import NETWORK_FOLDER, MAX_INSTRUMENTS, MAX_TONE
 
 def model_fn(features, labels, mode):
     input = features['input']
@@ -14,16 +14,29 @@ def model_fn(features, labels, mode):
             prev_layer, _ = tf.nn.dynamic_rnn(cell, prev_layer, dtype=tf.float32)
     prev_layer = tf.reshape(prev_layer[:, -1, :], (int(prev_layer.get_shape()[0]), int(prev_layer.get_shape()[2])))
     logits = tf.layers.dense(prev_layer, input.get_shape()[2], activation=None, name='logits')
-    output = tf.nn.sigmoid(logits)
+    output = tf.concat([
+        tf.nn.softmax(logits[:, :MAX_INSTRUMENTS]),
+        tf.nn.softmax(logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE]),
+        tf.nn.relu(logits[:, -2:])
+    ], 1)
     if mode != tf.estimator.ModeKeys.PREDICT:
         label = tf.reshape(labels['output'], tf.shape(logits))
-        loss = tf.losses.sigmoid_cross_entropy(label, logits)
-        trainer = tf.train.AdamOptimizer(1e-6).minimize(loss, tf.train.get_global_step())
+        loss_instr = tf.losses.softmax_cross_entropy(label[:, :MAX_INSTRUMENTS], logits[:, :MAX_INSTRUMENTS])
+        loss_tone = tf.losses.softmax_cross_entropy(label[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE], logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE])
+        loss_len = tf.losses.mean_squared_error(label[:, -2], tf.nn.relu(logits[:, -2]))
+        loss_del = tf.losses.mean_squared_error(label[:, -1], tf.nn.relu(logits[:, -1]))
+        loss = tf.add_n([loss_instr, loss_tone, loss_len*0.001, loss_del*0.1])
+        trainer = tf.train.AdamOptimizer(1e-7).minimize(loss, tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode,
-            predictions={output:output},
+            predictions={'output': output},
             loss=loss,
             train_op=trainer
+        )
+    else:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions={'output': output}
         )
 
 def network():

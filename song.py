@@ -2,31 +2,36 @@
 import os
 from math import log2
 import numpy as np
-from config import INPUT_FOLDER, OUTPUT_FOLDER
+from config import INPUT_FOLDER, OUTPUT_FOLDER, MAX_INSTRUMENTS, MAX_TONE
 
 
 def reduce_instrument(instr):
     """
         Reduces the range of instuments
     """
-    if instr > 31 and instr < 33: #Bass
-        return 1
-    if instr > 24 and instr < 29:  # Guitar
+    if instr > 32 and instr < 41: #Bass
         return 2
+    if instr > 24 and instr < 33:  # Guitar
+        return 3
     if instr == 0:
         return 0
-    return 3
+    if instr < 9:
+        return 4
+    return 1
 
 def expand_instument(instr):
     """
         Opposite of reduce_instuments
     """
-    if instr == 1:
-        return 40
     if instr == 2:
-        return 32
+        return 40
     if instr == 3:
+        return 32
+    if instr == 1:
         return 53
+    if instr == 4:
+        return 1
+    return instr
 
 
 class Note():
@@ -39,7 +44,7 @@ class Note():
         self.length = length
         self.delay = delay
     
-    def to_vector(self, max_instr=10, max_tone=120):
+    def to_vector(self, max_instr=MAX_INSTRUMENTS, max_tone=MAX_TONE):
         """
             Get the vector representing the note
         """
@@ -51,7 +56,7 @@ class Note():
         return vec
 
     @classmethod
-    def from_vector(cls, vector, max_instr=10, max_tone=120):
+    def from_vector(cls, vector, max_instr=MAX_INSTRUMENTS, max_tone=MAX_TONE):
         """
             Convert a matrix into a note
         """
@@ -132,7 +137,8 @@ class Song(object):
         instument_set = set()
         for note in self.notes:
             instument_set.add(note.instrument)
-        instument_set.remove(0)
+        if 0 in instument_set:
+            instument_set.remove(0)
         instruments = {ins: i for i, ins in enumerate(instument_set)}
         if file_name is None:
             file_name = os.path.join(OUTPUT_FOLDER, self.name+".csv")
@@ -141,7 +147,7 @@ class Song(object):
             file.write("1, 0, Start_track\n")
             file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit))))
             file.write("1, 0, Tempo, {}\n".format(self.tempo))
-            for ins, i in instruments:
+            for ins, i in instruments.items():
                 file.write("1, 0, Program_c, {}, {}\n".format(i, ins))
             file.write("1, 0, End_track\n")
             file.write("2, 0, Start_track\n")
@@ -158,8 +164,8 @@ class Song(object):
                     file.write("2, {}, Note_on_c, {}, {}, 80\n".format(note[1], note[0], note[2]))
                 else:
                     file.write("2, {}, Note_off_c, {}, {}, 0\n".format(note[1], note[0], note[2]))
-            file.write("2, {}, End_track\n".format(self.length))
-            file.write("0, 0, End_of_file\n")
+            file.write("2, {}, End_track\n".format(notelist[-1][1]))
+            file.write("0, {}, End_of_file\n".format(notelist[-1][1]+1))
         return file_name
 
     def import_cleanup(self, reduce_instruments=True, remove_percussion=True, minimum_note_length=1):
