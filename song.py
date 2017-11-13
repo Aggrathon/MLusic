@@ -91,7 +91,7 @@ class Song(object):
             self.ticks_per_quarter = int(lines[0][lines[0].rfind(",")+2:])
 
             notes = []
-            instruments = list(0 for _ in range(100))
+            instruments = list(-1 for _ in range(100))
             instruments[10] = 0
 
             for line in lines:

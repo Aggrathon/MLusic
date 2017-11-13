@@ -21,11 +21,16 @@ def model_fn(features, labels, mode):
     ], 1)
     if mode != tf.estimator.ModeKeys.PREDICT:
         label = tf.reshape(labels['output'], tf.shape(logits))
-        loss_instr = tf.losses.softmax_cross_entropy(label[:, :MAX_INSTRUMENTS], logits[:, :MAX_INSTRUMENTS])
-        loss_tone = tf.losses.softmax_cross_entropy(label[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE], logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE])
-        loss_len = tf.losses.mean_squared_error(label[:, -2], tf.nn.relu(logits[:, -2]))
-        loss_del = tf.losses.mean_squared_error(label[:, -1], tf.nn.relu(logits[:, -1]))
-        loss = tf.add_n([loss_instr, loss_tone, loss_len*0.001, loss_del*0.1])
+        with tf.variable_scope('Loss'):
+            loss_instr = tf.losses.softmax_cross_entropy(label[:, :MAX_INSTRUMENTS], logits[:, :MAX_INSTRUMENTS])
+            loss_tone = tf.losses.softmax_cross_entropy(label[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE], logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE])
+            loss_len = tf.losses.mean_squared_error(label[:, -2], tf.nn.relu(logits[:, -2]))*0.0001
+            loss_del = tf.losses.mean_squared_error(label[:, -1], tf.nn.relu(logits[:, -1]))*0.01
+            tf.summary.scalar("Instrument", loss_instr)
+            tf.summary.scalar("Tone", loss_tone)
+            tf.summary.scalar("Length", loss_len)
+            tf.summary.scalar("Delay", loss_del)
+            loss = tf.add_n([loss_instr, loss_tone, loss_len, loss_del])
         trainer = tf.train.AdamOptimizer(1e-7).minimize(loss, tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode,
