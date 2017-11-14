@@ -13,7 +13,7 @@ def reduce_instrument(instr):
         return 2
     if instr > 24 and instr < 33:  # Guitar
         return 3
-    if instr == 0:
+    if instr == 128:
         return 0
     if instr < 9:
         return 4
@@ -38,11 +38,12 @@ class Note():
     """
         Class for containing a note in a sequence
     """
-    def __init__(self, instrument=0, tone=0, length=0, delay=0):
+    def __init__(self, instrument=0, tone=0, length=0, delay=0, channel=0):
         self.instrument = instrument
         self.tone = tone
         self.length = length
         self.delay = delay
+        self.channel = channel
     
     def to_vector(self, max_instr=MAX_INSTRUMENTS, max_tone=MAX_TONE):
         """
@@ -92,7 +93,8 @@ class Song(object):
 
             notes = []
             instruments = list(-1 for _ in range(100))
-            instruments[10] = 0
+            instruments[9] = 128
+            instruments[10] = 128
 
             for line in lines:
                 split = line.split(", ")
@@ -100,13 +102,13 @@ class Song(object):
                     time = int(split[1])
                     channel = int(split[3])
                     note = int(split[4])
-                    notes.append(Note(channel, note, 0, time))
+                    notes.append(Note(instruments[channel], note, 1000, time, channel))
                 elif split[2] == "Note_off_c": #setting the length of a note
                     time = int(split[1])
                     channel = int(split[3])
                     tone = int(split[4])
                     for note in reversed(notes):
-                        if note.instrument == channel and note.tone == tone:
+                        if note.channel == channel and note.tone == tone:
                             note.length = time - note.delay
                             break
                 elif split[2] == "Tempo":
@@ -123,13 +125,15 @@ class Song(object):
             notes.sort(key=lambda n: n.delay)
             time = notes[0].delay
             for note in notes:
-                note.instrument = instruments[note.instrument]  #Convert channels to instruments
                 t = note.delay - time
                 time = note.delay
                 note.delay = t  #Convert time to delay since last note
             
-            self.instruments = set(i for i in instruments if i > 0)
+            self.instruments = set(n.instrument for n in notes)
             self.notes = notes
+            time = 0
+            for note in notes:
+                time += note.delay
             self.length = time + notes[-1].length
         return self
 
@@ -173,7 +177,7 @@ class Song(object):
             for note in self.notes:
                 note.instrument = reduce_instrument(note.instrument)
         self.notes = [n for n in self.notes if \
-            not (remove_percussion and n.instrument == 0) and \
+            not (remove_percussion and n.instrument == 128) and \
             not n.length < minimum_note_length]
         self.instruments = set(n.instrument for n in self.notes)
 

@@ -8,7 +8,7 @@ from config import NETWORK_FOLDER, MAX_INSTRUMENTS, MAX_TONE
 def model_fn(features, labels, mode):
     input = features['input']
     prev_layer = input
-    for i, s in enumerate((128, 64, 64, 128)):
+    for i, s in enumerate((160, 128, 160, 128)):
         with tf.variable_scope("LSTM_%d"%i):
             cell = tf.nn.rnn_cell.LSTMCell(s, activation=tf.nn.relu)
             prev_layer, _ = tf.nn.dynamic_rnn(cell, prev_layer, dtype=tf.float32)
@@ -31,7 +31,7 @@ def model_fn(features, labels, mode):
             tf.summary.scalar("Length", loss_len)
             tf.summary.scalar("Delay", loss_del)
             loss = tf.add_n([loss_instr, loss_tone, loss_len, loss_del])
-        trainer = tf.train.AdamOptimizer(1e-7).minimize(loss, tf.train.get_global_step())
+        trainer = tf.train.AdamOptimizer(5e-8).minimize(loss, tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions={'output': output},
