@@ -15,5 +15,5 @@ MAX_INSTRUMENTS = 10
 """
     Training config
 """
-BATCH_SIZE = 32
+BATCH_SIZE = 40
 SEQUENCE_LENGTH = 64

@@ -9,10 +9,12 @@ def reduce_instrument(instr):
     """
         Reduces the range of instuments
     """
-    if instr > 32 and instr < 41: #Bass
+    if instr > 32 and instr < 41: # Bass
         return 2
     if instr > 24 and instr < 33:  # Guitar
         return 3
+    if instr > 40 and instr < 49: # Strings
+        return 5
     if instr == 128:
         return 0
     if instr < 9:
@@ -31,6 +33,8 @@ def expand_instument(instr):
         return 53
     if instr == 4:
         return 1
+    if instr == 5:
+        return 41
     return instr
 
 
@@ -193,7 +197,7 @@ class Song(object):
         self.length = time + self.notes[-1].length
 
 
-def read_all_inputs():
+def read_all_inputs() -> Song:
     return [Song.read_csv_file(os.path.join(INPUT_FOLDER, s))
             for s in os.listdir(INPUT_FOLDER) if s.endswith(".csv")]
 
