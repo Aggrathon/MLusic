@@ -9,10 +9,8 @@ if __name__ == "__main__":
     tf.logging.set_verbosity(tf.logging.INFO)
     def input_fn():
         vectors = get_all_vectors()
-        data = tf.convert_to_tensor(vectors, tf.float32)
-        data = tf.reshape(data, vectors.shape)
-        batch = tf.stack([tf.random_crop(data, (SEQUENCE_LENGTH+1, vectors.shape[-1])) for _ in range(BATCH_SIZE)])
-        batch = tf.reshape(batch, (BATCH_SIZE, SEQUENCE_LENGTH+1, vectors.shape[-1]))
+        data = tf.data.Dataset.from_tensor_slices(vectors)
+        batch = data.repeat().batch(SEQUENCE_LENGTH+1).shuffle(buffer_size=1000).batch(BATCH_SIZE).make_one_shot_iterator().get_next()
         return {'input': batch[:, :-1, :]}, {'output': batch[:, -1:, :]}
     nn = network()
     nn.train(input_fn)

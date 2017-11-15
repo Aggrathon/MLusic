@@ -102,7 +102,7 @@ class Song(object):
                     time = int(split[1])
                     channel = int(split[3])
                     note = int(split[4])
-                    notes.append(Note(instruments[channel], note, 1000, time, channel))
+                    notes.append(Note(instruments[channel], note, -1, time, channel))
                 elif split[2] == "Note_off_c": #setting the length of a note
                     time = int(split[1])
                     channel = int(split[3])
@@ -161,7 +161,8 @@ class Song(object):
                 time += note.delay
                 if note.instrument != 0:
                     notelist.append((instruments[note.instrument], time, note.tone, True))
-                    notelist.append((instruments[note.instrument], time+note.length, note.tone, False))
+                    if note.length > 0:
+                        notelist.append((instruments[note.instrument], time+note.length, note.tone, False))
             notelist.sort(key=lambda n: n[1])
             for note in notelist:
                 if note[-1]:
@@ -178,7 +179,7 @@ class Song(object):
                 note.instrument = reduce_instrument(note.instrument)
         self.notes = [n for n in self.notes if \
             not (remove_percussion and n.instrument == 128) and \
-            not n.length < minimum_note_length]
+            not (n.length < minimum_note_length and n.length >= 0) ]
         self.instruments = set(n.instrument for n in self.notes)
 
     def export_cleanup(self, reduced_instruments=True):
@@ -202,4 +203,4 @@ def get_all_vectors():
     for s in songs:
         s.import_cleanup()
     print("Converting notes to vectors")
-    return np.asarray([note.to_vector() for song in songs for note in song.notes], np.float)
+    return np.asarray([note.to_vector() for song in songs for note in song.notes], np.float32)
