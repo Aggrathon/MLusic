@@ -1,11 +1,10 @@
 
 import random
-import numpy as np
 import tensorflow as tf
+from config import SEQUENCE_LENGTH
 from model import network
 from song import Song, Note, get_all_vectors
 from convert_outputs import save_and_convert_song
-from config import SEQUENCE_LENGTH
 
 
 if __name__ == "__main__":
@@ -20,7 +19,7 @@ if __name__ == "__main__":
     def feed():
         global ph
         return {ph: [sequence[-SEQUENCE_LENGTH:]]}
-    nn = network()
+    nn = network(1)
     for i, vec in enumerate(nn.predict(input, None, [tf.train.FeedFnHook(feed)])):
         sequence.append(vec['output'])
         if i > 1000:

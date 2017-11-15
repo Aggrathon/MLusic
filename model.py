@@ -5,19 +5,20 @@
 import tensorflow as tf
 from config import NETWORK_FOLDER, MAX_INSTRUMENTS, MAX_TONE, BATCH_SIZE
 
-def model_fn(features, labels, mode):
+def model_fn(features, labels, mode, params):
     input = features['input']
     prev_layer = input
     for i, s in enumerate((160, 128, 160, 128)):
         with tf.variable_scope("LSTM_%d"%i):
             cell = tf.nn.rnn_cell.LSTMCell(s)
+            if mode == tf.estimator.ModeKeys.TRAIN:
+                cell = tf.nn.rnn_cell.DropoutWrapper(cell, 0.8)
             prev_layer, _ = tf.nn.dynamic_rnn(cell, prev_layer, dtype=tf.float32)
-            prev_layer = tf.layers.dropout(prev_layer, 0.2)
-    prev_layer = tf.reshape(prev_layer[:, -1, :], (BATCH_SIZE, int(prev_layer.get_shape()[2])))
+    prev_layer = tf.reshape(prev_layer[:, -1, :], (params['batch_size'], int(prev_layer.get_shape()[2])))
     logits = tf.layers.dense(prev_layer, input.get_shape()[2], activation=None, name='logits')
     output = tf.concat([
-        tf.nn.softmax(logits[:, :MAX_INSTRUMENTS]),
-        tf.nn.softmax(logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE]),
+        tf.nn.softmax(logits[:, :MAX_INSTRUMENTS]+tf.random_uniform((params['batch_size'], MAX_INSTRUMENTS), -0.1, 0.1)),
+        tf.nn.softmax(logits[:, MAX_INSTRUMENTS:MAX_INSTRUMENTS+MAX_TONE]+tf.random_uniform((params['batch_size'], MAX_TONE), -0.1, 0.1)),
         tf.nn.relu(logits[:, -2:])
     ], 1)
     if mode != tf.estimator.ModeKeys.PREDICT:
@@ -45,5 +46,5 @@ def model_fn(features, labels, mode):
             predictions={'output': output}
         )
 
-def network():
-    return tf.estimator.Estimator(model_fn, NETWORK_FOLDER)
+def network(batch_size=BATCH_SIZE):
+    return tf.estimator.Estimator(model_fn, NETWORK_FOLDER, None, {'batch_size': batch_size})
