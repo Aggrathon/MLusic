@@ -68,7 +68,7 @@ class Note():
         return Note(
             np.argmax(vector[:max_instr]),
             np.argmax(vector[max_instr:max_instr+max_tone]),
-            int(vector[-2]),
+            max(0, int(vector[-2])),
             int(vector[-1])
         )
 
@@ -207,4 +207,6 @@ def get_all_vectors():
     for s in songs:
         s.import_cleanup()
     print("Converting notes to vectors")
-    return np.asarray([note.to_vector() for song in songs for note in song.notes], np.float32)
+    arr = np.asarray([note.to_vector() for song in songs for note in song.notes], np.float32)
+    print("Done converting")
+    return arr
