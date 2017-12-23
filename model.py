@@ -4,34 +4,11 @@
 import os
 import tensorflow as tf
 
-DATA_FOLDER = "data"
-SAMPLE_RATE = 44100
-AUDIO_FORMAT = 'ogg'
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
 SEQUENCE_LENGTH = 648519 #Based on the transpose convolutional layers (~15s)
+NETWORK_FOLDER = 'network'
 
-
-def read_data(folder=DATA_FOLDER, sample=SAMPLE_RATE, format=AUDIO_FORMAT):
-    """
-        Get a combined audio sequence from a folder
-    """
-    files = []
-    for name in os.listdir(folder):
-        if name[-3:] == format:
-            data = tf.read_file(os.path.join(folder, name))
-            audio = tf.contrib.ffmpeg.decode_audio(data, format, sample, 1)
-            files.append(audio)
-    with tf.Session() as sess:
-        return tf.concat(files, 0).eval(session=sess)
-
-def input_fn():
-    """
-        Basic input to the Estimator
-    """
-    data = tf.convert_to_tensor(read_data(), dtype=tf.float32, name='should_not_be_saved_in_network')
-    rnd = tf.stack([tf.random_crop(data, (SEQUENCE_LENGTH, 1)) for _ in range(BATCH_SIZE)])
-    return dict(input=rnd), dict()
 
 def model_fn(features, labels, mode, params=dict()):
     """
