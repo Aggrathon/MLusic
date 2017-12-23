@@ -3,7 +3,7 @@
 """
 import os
 import subprocess
-import datetime
+from multiprocessing import Pool
 import tensorflow as tf
 import numpy as np
 
@@ -46,48 +46,37 @@ def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
         audio /= peak
     return audio
 
-def read_data(folder=DATA_FOLDER, sample=SAMPLE_RATE, ending=AUDIO_FORMAT):
-    """
-        Get a combined audio sequence from a folder
-    """
-    files = [name for name in os.listdir(folder) if name[-len(ending):] == ending]
-    np.random.shuffle(files)
-    return np.concatenate([ ffmpeg_load_audio(os.path.join(DATA_FOLDER, name), sample) for name in files ])
+def _convert(file):
+        data = ffmpeg_load_audio(file)
+        with open(file+".csv", "w") as f:
+            for d in data:
+                f.write(str(d)+'\n')
 
-def write_data(data):
+
+def convert_input(folder=DATA_FOLDER, ending=AUDIO_FORMAT):
     """
-        Write the data to a *.tfrecords file
+        Converts all inputs in a folder 
     """
-    os.makedirs(DATA_FOLDER, exist_ok=True)
-    timestamp = '{:%Y%m%d%H%M%S}'.format(datetime.datetime.now())
-    with tf.python_io.TFRecordWriter(os.path.join(DATA_FOLDER, "data_%s.tfrecords"%(timestamp))) as writer:
-        for d in data:
-            record = tf.train.Example(features=tf.train.Features(feature={
-                'sound': tf.train.Feature(float_list=tf.train.FloatList(value=(d,)))
-            }))
-            writer.write(record.SerializeToString())
+    files = [os.path.join(DATA_FOLDER, name) for name in os.listdir(folder) if name.endswith(ending)]
+    np.random.shuffle(files)
+    Pool().map(_convert, files)
+
 
 def input_fn():
     """
-        Read *.tfrecords files and return input dicts
+        Read converted input files and return input dicts
     """
-    files = [os.path.join(DATA_FOLDER, f) for f in os.listdir(DATA_FOLDER) if '.tfrecord' in f]
-    dataset = tf.data.TFRecordDataset(files)
-    dataset = dataset.map(lambda r: tf.parse_single_example(r, { 'sound': tf.FixedLenFeature((), tf.float32) }))
-    dataset = dataset.repeat()
+    files = [os.path.join(DATA_FOLDER, f) for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
+    np.random.shuffle(files)
+    dataset = tf.data.Dataset.from_tensor_slices(files)
+    dataset = dataset.flat_map(lambda filename: (tf.data.TextLineDataset(filename).map(lambda line: tf.decode_csv(line, [[0.0]]))))
+    dataset = dataset.cache().repeat()
     dataset = dataset.batch(SEQUENCE_LENGTH)
     dataset = dataset.shuffle(10000)
     dataset = dataset.batch(BATCH_SIZE)
-    iterator = dataset.make_one_shot_iterator().get_next()
-    print(iterator.get_shape())
-    return {'input': iterator}, None
+    iterator = dataset.make_one_shot_iterator()
+    return {'input': iterator.get_next()[0]}, None
 
-
-def convert_input():
-    print("Reading Data")
-    data = read_data()
-    print("Writing Data")
-    write_data(data)
 
 if __name__ == "__main__":
     convert_input()
