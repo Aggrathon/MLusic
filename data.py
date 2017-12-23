@@ -10,7 +10,7 @@ import numpy as np
 from model import SEQUENCE_LENGTH, BATCH_SIZE
 
 DATA_FOLDER = "data"
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 32000 #44100
 AUDIO_FORMAT = 'ogg'
 
 def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
@@ -47,10 +47,11 @@ def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
     return audio
 
 def _convert(file):
-        data = ffmpeg_load_audio(file)
-        with open(file+".csv", "w") as f:
-            for d in data:
-                f.write(str(d)+'\n')
+    data = ffmpeg_load_audio(file)
+    with open(file+".csv", "w") as f:
+        for d in data:
+            f.write(str(d)+'\n')
+    print("Converted:", file)
 
 
 def convert_input(folder=DATA_FOLDER, ending=AUDIO_FORMAT):
@@ -66,13 +67,21 @@ def input_fn():
     """
         Read converted input files and return input dicts
     """
-    files = [os.path.join(DATA_FOLDER, f) for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
-    np.random.shuffle(files)
-    dataset = tf.data.Dataset.from_tensor_slices(files)
-    dataset = dataset.flat_map(lambda filename: (tf.data.TextLineDataset(filename).map(lambda line: tf.decode_csv(line, [[0.0]]))))
+    def gen():
+        files = [os.path.join(DATA_FOLDER, f) for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
+        np.random.shuffle(files)
+        for file in files:
+            with open(file) as f:
+                line = f.readline()
+                if line:
+                    try:
+                        yield float(line[:-1])
+                    except:
+                        pass
+    dataset = tf.data.Dataset.from_generator(gen, tf.float32, ())
     dataset = dataset.cache().repeat()
     dataset = dataset.batch(SEQUENCE_LENGTH)
-    dataset = dataset.shuffle(10000)
+    dataset = dataset.shuffle(5000)
     dataset = dataset.batch(BATCH_SIZE)
     iterator = dataset.make_one_shot_iterator()
     return {'input': iterator.get_next()[0]}, None

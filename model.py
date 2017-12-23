@@ -6,7 +6,7 @@ import tensorflow as tf
 
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
-SEQUENCE_LENGTH = 648519 #Based on the transpose convolutional layers (~15s)
+SEQUENCE_LENGTH = 216039 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 7s)
 NETWORK_FOLDER = 'network'
 
 
@@ -14,7 +14,6 @@ def model_fn(features, labels, mode, params=dict()):
     """
         The function that generates the network for the estimator
     """
-    audio = features['input']
     batch_size = params.get('batch_size', BATCH_SIZE)
     learning_rate = params.get('learning_rate', LEARNING_RATE)
     sequence_length = params.get('sequence_length', SEQUENCE_LENGTH)
@@ -27,18 +26,20 @@ def model_fn(features, labels, mode, params=dict()):
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
         prev_layer = tf.layers.conv2d_transpose(prev_layer, 80, (33, 1), (16, 1), activation=tf.nn.relu, name='conv_transpose_0')
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 64, (17, 1), (10, 1), activation=tf.nn.relu, name='conv_transpose_1')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 64, (15, 1), (10, 1), activation=tf.nn.relu, name='conv_transpose_1')
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 48, (13, 1), (8, 1), activation=tf.nn.relu, name='conv_transpose_2')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 48, (11, 1), (8, 1), activation=tf.nn.relu, name='conv_transpose_2')
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 32, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_transpose_3')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 32, (9, 1), (4, 1), activation=tf.nn.relu, name='conv_transpose_3')
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 1, (7, 1), (4, 1), activation=tf.nn.tanh, name='conv_transpose_4')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 1, (7, 1), (2, 1), activation=tf.nn.tanh, name='conv_transpose_4')
+        print(prev_layer.get_shape())
         output = tf.reshape(prev_layer, (batch_size, sequence_length))
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=output))
     
+    audio = tf.reshape(features['input'], (batch_size, sequence_length))
     prev_layer = tf.concat((output, audio), 0)
     labels = tf.convert_to_tensor([[0.1]]*batch_size + [[0.9]]*batch_size)
     with tf.variable_scope('discriminator'):
@@ -62,7 +63,7 @@ def model_fn(features, labels, mode, params=dict()):
     with tf.variable_scope('training'):
         loss_disc = tf.losses.sigmoid_cross_entropy(labels, logits)
         loss_gen = tf.losses.sigmoid_cross_entropy(1.0-labels, logits)
-        loss_sim = tf.reduce_mean(tf.abs(0.5 - tf.abs(output-tf.reduce_mean(output, 0, True))))
+        loss_sim = tf.reduce_mean(tf.maximum(0.0, 0.2 - tf.abs(output-tf.reduce_mean(output, 0, True))))
         tf.summary.scalar("DiscriminatorLoss", loss_disc)
         tf.summary.scalar("GeneratorLoss", loss_gen)
         tf.summary.scalar("SimilarityLoss", loss_sim)
