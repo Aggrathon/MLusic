@@ -46,21 +46,17 @@ def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
         audio /= peak
     return audio
 
-def _convert(file):
-    data = ffmpeg_load_audio(file)
-    with open(file+".csv", "w") as f:
-        for d in data:
-            f.write(str(d)+'\n')
-    print("Converted:", file)
 
-
-def convert_input(folder=DATA_FOLDER, ending=AUDIO_FORMAT):
+def convert_input(folder=DATA_FOLDER, sample=SAMPLE_RATE, ending=AUDIO_FORMAT):
     """
         Converts all inputs in a folder 
     """
-    files = [os.path.join(DATA_FOLDER, name) for name in os.listdir(folder) if name.endswith(ending)]
+    files = [(os.path.join(DATA_FOLDER, name), sample) for name in os.listdir(folder) if name.endswith(ending)]
     np.random.shuffle(files)
-    Pool().map(_convert, files)
+    data = np.concatenate(Pool().starmap(ffmpeg_load_audio, files))
+    path = os.path.join(folder, 'data.npy')
+    np.save(path, data)
+    print("Saved data to:", path)
 
 
 def input_fn():
@@ -68,23 +64,17 @@ def input_fn():
         Read converted input files and return input dicts
     """
     def gen():
-        files = [os.path.join(DATA_FOLDER, f) for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
-        np.random.shuffle(files)
-        for file in files:
-            with open(file) as f:
-                line = f.readline()
-                if line:
-                    try:
-                        yield float(line[:-1])
-                    except:
-                        pass
+        path = os.path.join(DATA_FOLDER, 'data.npy')
+        data = np.load(path)
+        for d in data:
+            yield d
     dataset = tf.data.Dataset.from_generator(gen, tf.float32, ())
     dataset = dataset.cache().repeat()
     dataset = dataset.batch(SEQUENCE_LENGTH)
-    dataset = dataset.shuffle(5000)
+    dataset = dataset.shuffle(500)
     dataset = dataset.batch(BATCH_SIZE)
-    iterator = dataset.make_one_shot_iterator()
-    return {'input': iterator.get_next()[0]}, None
+    iterator = dataset.make_one_shot_iterator().get_next()
+    return {'input': iterator}, None
 
 
 if __name__ == "__main__":

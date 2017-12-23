@@ -33,7 +33,6 @@ def model_fn(features, labels, mode, params=dict()):
         prev_layer = tf.layers.conv2d_transpose(prev_layer, 32, (9, 1), (4, 1), activation=tf.nn.relu, name='conv_transpose_3')
         prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
         prev_layer = tf.layers.conv2d_transpose(prev_layer, 1, (7, 1), (2, 1), activation=tf.nn.tanh, name='conv_transpose_4')
-        print(prev_layer.get_shape())
         output = tf.reshape(prev_layer, (batch_size, sequence_length))
 
     if mode == tf.estimator.ModeKeys.PREDICT:
