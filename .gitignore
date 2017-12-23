@@ -4,3 +4,4 @@ env
 .env
 data/
 network/
+input/
