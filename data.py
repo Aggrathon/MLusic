@@ -3,6 +3,7 @@
 """
 import os
 import subprocess
+import random
 from multiprocessing import Pool
 import tensorflow as tf
 import numpy as np
@@ -11,7 +12,7 @@ from model import SEQUENCE_LENGTH, BATCH_SIZE
 
 DATA_FOLDER = "data"
 SAMPLE_RATE = 32000 #44100
-AUDIO_FORMAT = 'ogg'
+AUDIO_FORMAT = '.ogg'
 
 def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
     """
@@ -20,6 +21,7 @@ def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
     channels = 1
     command = [
         'ffmpeg',
+        "-loglevel", "error",
         '-i', filename,
         '-f', 'f32le',
         '-acodec', 'pcm_f32le',
@@ -46,6 +48,21 @@ def ffmpeg_load_audio(filename, sample_rate=SAMPLE_RATE):
         audio /= peak
     return audio
 
+def ffmpeg_write_audio(filename, data, sample_rate=SAMPLE_RATE):
+    cmd = [ 'ffmpeg', '-y',
+        '-f', 'f32le',
+        '-acodec', 'pcm_f32le',
+        '-ac', "1",
+        '-ar', str(sample_rate),
+        '-i', '-',
+        filename,
+        '-vn',
+        '-ac', '1',
+        '-acodec', 'pcm_u8']
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    p.stdin.write(data.tobytes())
+    p.stdin.close()
+
 
 def convert_input(folder=DATA_FOLDER, sample=SAMPLE_RATE, ending=AUDIO_FORMAT):
     """
@@ -66,12 +83,14 @@ def input_fn():
     def gen():
         path = os.path.join(DATA_FOLDER, 'data.npy')
         data = np.load(path)
-        for d in data:
-            yield d
-    dataset = tf.data.Dataset.from_generator(gen, tf.float32, ())
-    dataset = dataset.cache().repeat()
-    dataset = dataset.batch(SEQUENCE_LENGTH)
-    dataset = dataset.shuffle(500)
+        if data is None or data.shape[0] == 0:
+            print("Could not read the data file")
+            import sys
+            sys.exit()
+        while True:
+            rnd = random.randrange(0, data.shape[0]-SEQUENCE_LENGTH)
+            yield data[rnd:rnd+SEQUENCE_LENGTH]
+    dataset = tf.data.Dataset.from_generator(gen, tf.float32)
     dataset = dataset.batch(BATCH_SIZE)
     iterator = dataset.make_one_shot_iterator().get_next()
     return {'input': iterator}, None

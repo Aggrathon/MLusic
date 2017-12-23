@@ -4,7 +4,7 @@
 import os
 import tensorflow as tf
 from model import model_fn, NETWORK_FOLDER
-from data import SAMPLE_RATE
+from data import ffmpeg_write_audio, AUDIO_FORMAT
 
 OUTPUT_FOLDER = 'output'
 
@@ -20,10 +20,8 @@ def generate():
     for res in model.predict(input_fn):
         output = res['output']
         break
-    with tf.Session() as sess:
-        output = tf.convert_to_tensor(output)
-        output = tf.contrib.ffmpeg.encode_audio(output, 'wav', SAMPLE_RATE)
-        sess.run(tf.write_file(os.path.join(OUTPUT_FOLDER, 'output.wav'), output))
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+    ffmpeg_write_audio(os.path.join(OUTPUT_FOLDER, 'data.wav'), output)
 
 if __name__ == "__main__":
     generate()
