@@ -1,80 +1,84 @@
 """
     The AudioGAN neural network
 """
+import os
 import tensorflow as tf
-import sys
 
 DATA_FOLDER = "data"
 SAMPLE_RATE = 44100
-SEQUENCE_LENGTH = 680639    #Based on the output from the convolutional transpose layers (~15s)
 AUDIO_FORMAT = 'ogg'
+BATCH_SIZE = 32
+LEARNING_RATE = 1e-4
+SEQUENCE_LENGTH = 648519 #Based on the transpose convolutional layers (~15s)
 
 
-def read_data(folder=DATA_FOLDER, sample=SAMPLE_RATE, length=SEQUENCE_LENGTH, format=AUDIO_FORMAT):
+def read_data(folder=DATA_FOLDER, sample=SAMPLE_RATE, format=AUDIO_FORMAT):
     """
-        Get batched audio sequences from a folder
+        Get a combined audio sequence from a folder
     """
-    filename_queue = tf.train.string_input_producer(tf.train.match_filenames_once(folder+"/*."+format), capacity=1000)
-    reader = tf.WholeFileReader()
-    _, value = reader.read(filename_queue)
-    audio = tf.contrib.ffmpeg.decode_audio(value, format, sample, 1)
-    slices = [tf.to_float(tf.random_crop(audio, (length, 1))) for _ in range(10)]
-    batch = tf.train.shuffle_batch([slices], 32, 500, 100, 4, enqueue_many=True)
-    return batch
-
+    files = []
+    for name in os.listdir(folder):
+        if name[-3:] == format:
+            data = tf.read_file(os.path.join(folder, name))
+            audio = tf.contrib.ffmpeg.decode_audio(data, format, sample, 1)
+            files.append(audio)
+    with tf.Session() as sess:
+        return tf.concat(files, 0).eval(session=sess)
 
 def input_fn():
     """
-        Training input to the estimator
+        Basic input to the Estimator
     """
-    return dict(input=read_data()), dict()
+    data = tf.convert_to_tensor(read_data(), dtype=tf.float32, name='should_not_be_saved_in_network')
+    rnd = tf.stack([tf.random_crop(data, (SEQUENCE_LENGTH, 1)) for _ in range(BATCH_SIZE)])
+    return dict(input=rnd), dict()
 
-
-def model_fn(features, labels, mode):
+def model_fn(features, labels, mode, params=dict()):
     """
         The function that generates the network for the estimator
     """
     audio = features['input']
-    batch_size = 1 if audio is None else audio.get_shape()[0].value
+    batch_size = params.get('batch_size', BATCH_SIZE)
+    learning_rate = params.get('learning_rate', LEARNING_RATE)
     with tf.variable_scope("generator"):
         prev_layer = tf.random_uniform((batch_size, 100), 0, 1, tf.float32)
         prev_layer = tf.layers.dense(prev_layer, 1000, tf.nn.relu)
-        prev_layer = tf.reshape(prev_layer, (batch_size, 10, 1, 100))
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 112, (21, 1), (14, 1), activation=tf.nn.relu, name='conv_transpose_0')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 96, (13, 1), (8, 1), activation=tf.nn.relu, name='conv_transpose_1')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 80, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_transpose_2')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 64, (7, 1), (4, 1), activation=tf.nn.relu, name='conv_transpose_3')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 48, (7, 1), (4, 1), activation=tf.nn.relu, name='conv_transpose_4')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 32, (5, 1), (3, 1), activation=tf.nn.relu, name='conv_transpose_5')
-        prev_layer = tf.layers.conv2d_transpose(prev_layer, 1, (3, 1), (2, 1), activation=tf.nn.relu, name='conv_transpose_6') # MAYBE tanh
+        prev_layer = tf.layers.dense(prev_layer, 2000, tf.nn.relu)
+        prev_layer = tf.reshape(prev_layer, (batch_size, 20, 1, 100))
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 80, (33, 1), (16, 1), activation=tf.nn.relu, name='conv_transpose_0')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 64, (17, 1), (10, 1), activation=tf.nn.relu, name='conv_transpose_1')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 48, (13, 1), (8, 1), activation=tf.nn.relu, name='conv_transpose_2')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 32, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_transpose_3')
+        prev_layer = tf.layers.conv2d_transpose(prev_layer, 1, (7, 1), (4, 1), activation=tf.nn.relu, name='conv_transpose_4') # MAYBE tanh
         prev_layer = tf.reshape(prev_layer, prev_layer.get_shape().as_list()[:3])
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=prev_layer))
     
     prev_layer = tf.concat((prev_layer, audio), 0)
-    labels = [[0]]*batch_size + [[1]]*batch_size
+    labels = tf.convert_to_tensor([[0.05]]*batch_size + [[0.95]]*batch_size)
     with tf.variable_scope('discriminator'):
         prev_layer = tf.reshape(prev_layer, prev_layer.get_shape().as_list()+[1])
-        prev_layer = tf.layers.conv2d(prev_layer, 32, (5, 1), (2, 1), activation=tf.nn.relu, name='conv_0')
-        prev_layer = tf.layers.conv2d(prev_layer, 40, (5, 1), (3, 1), activation=tf.nn.relu, name='conv_1')
-        prev_layer = tf.layers.conv2d(prev_layer, 48, (7, 1), (3, 1), activation=tf.nn.relu, name='conv_2')
-        prev_layer = tf.layers.conv2d(prev_layer, 56, (7, 1), (4, 1), activation=tf.nn.relu, name='conv_3')
-        prev_layer = tf.layers.conv2d(prev_layer, 64, (9, 1), (4, 1), activation=tf.nn.relu, name='conv_4')
-        prev_layer = tf.layers.conv2d(prev_layer, 72, (9, 1), (5, 1), activation=tf.nn.relu, name='conv_5')
+        prev_layer = tf.layers.conv2d(prev_layer, 40, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_0')
+        prev_layer = tf.layers.conv2d(prev_layer, 48, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_1')
+        prev_layer = tf.layers.conv2d(prev_layer, 56, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_2')
+        prev_layer = tf.layers.conv2d(prev_layer, 64, (13, 1), (8, 1), activation=tf.nn.relu, name='conv_3')
+        prev_layer = tf.layers.conv2d(prev_layer, 72, (15, 1), (10, 1), activation=tf.nn.relu, name='conv_4')
         prev_layer = tf.contrib.layers.flatten(prev_layer)
-        prev_layer = tf.layers.dense(prev_layer, 2048, activation=tf.nn.relu, name='fc_0')
-        prev_layer = tf.layers.dense(prev_layer, 512, activation=tf.nn.relu, name='fc_1')
+        prev_layer = tf.layers.dense(prev_layer, 1024, activation=tf.nn.relu, name='fc_0')
+        prev_layer = tf.layers.dense(prev_layer, 256, activation=tf.nn.relu, name='fc_1')
         prev_layer = tf.layers.dense(prev_layer, 64, activation=tf.nn.relu, name='fc_2')
         logits = tf.layers.dense(prev_layer, 1, name="logits")
         #predictions = tf.nn.sigmoid(logits, name="predictions")
 
     with tf.variable_scope('training'):
-        loss = tf.losses.sigmoid_cross_entropy(labels, logits)
-        adam = tf.train.AdamOptimizer(1e-4)
-        trainer = adam.minimize(loss, global_step=tf.contrib.framework.get_global_step())
+        loss_disc = tf.losses.sigmoid_cross_entropy(labels, logits)
+        loss_gen = tf.losses.sigmoid_cross_entropy(1.0-labels, logits)
+        adam = tf.train.AdamOptimizer(learning_rate)
+        trainer_disc = adam.minimize(loss_disc, global_step=tf.contrib.framework.get_global_step(), var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "discriminator"))
+        trainer_gen = adam.minimize(loss_gen, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "generator"))
 
         return tf.estimator.EstimatorSpec(
             mode=mode,
-            loss=loss,
-            train_op=trainer)
+            loss=loss_disc+loss_gen,
+            train_op=tf.group(trainer_disc, trainer_gen))
