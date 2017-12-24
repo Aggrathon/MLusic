@@ -5,8 +5,9 @@ import os
 import tensorflow as tf
 
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-5
-SEQUENCE_LENGTH = 258051 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 8s)
+LEARNING_RATE = 2e-5
+SEQUENCE_LENGTH = 26743 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 1s)
+VARIABLE_SIZE = 100
 NETWORK_FOLDER = 'network'
 
 
@@ -17,63 +18,61 @@ def model_fn(features, labels, mode, params=dict()):
     batch_size = params.get('batch_size', BATCH_SIZE)
     learning_rate = params.get('learning_rate', LEARNING_RATE)
     sequence_length = params.get('sequence_length', SEQUENCE_LENGTH)
+    variable_size = params.get('variable_size', VARIABLE_SIZE)
     training = mode == tf.estimator.ModeKeys.TRAIN
-    with tf.variable_scope("generator"):
-        prev_layer = tf.random_uniform((batch_size, 100), 0, 1, tf.float32)
-        prev_layer = tf.layers.dense(prev_layer, 1000, tf.nn.relu)
-        prev_layer = tf.layers.dense(prev_layer, 2000, tf.nn.relu)
-        prev_layer = tf.reshape(prev_layer, (batch_size, 20, 1, 100))
-        layers = [
-            (80, 15, 8),
-            (80, 15, 8),
-            (64, 15, 8),
-            (48, 11, 6),
-            (32, 9, 4),
-            (1, 3, 1),
-        ]
-        for i, l in enumerate(layers):
-            prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-            prev_layer = tf.layers.conv2d_transpose(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, name='conv_transpose_%d'%i)
-        print(prev_layer.get_shape())
-        output = tf.reshape(prev_layer, (batch_size, sequence_length))
+    layers = [
+        (64, 9, 2),
+        (64, 7, 2),
+        (48, 7, 2),
+        (40, 5, 2),
+        (36, 5, 2),
+        (32, 5, 2),
+        (28, 5, 2),
+        (24, 3, 2),
+        (20, 3, 2)
+    ]
 
-    if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=output))
+    if mode != tf.estimator.ModeKeys.PREDICT:
+        audio = tf.reshape(features['input'], (batch_size, sequence_length, 1, 1))
+        with tf.variable_scope("encoder"):
+            prev_layer = audio
+            for i, l in enumerate(list(reversed(layers))):
+                prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
+                prev_layer = tf.layers.conv2d(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, name='conv_transpose_%d'%i)
+                #print('enc', i, prev_layer.get_shape())
+            prev_layer = tf.reshape(prev_layer, (batch_size, -1))
+            var_stddv = tf.layers.dense(prev_layer, variable_size, tf.nn.tanh, name='var_stddv')
+            var_mean = tf.layers.dense(prev_layer, variable_size, tf.nn.tanh, name='var_mean')
+            encoding = tf.add(tf.random_normal([batch_size, variable_size], 0.0, 1.0, dtype=tf.float32)*var_stddv, var_mean, name="encoding")
+    else:
+        encoding = tf.random_normal((batch_size, variable_size), -1.0, 1.0, tf.float32, name='encoding')
     
-    audio = tf.reshape(features['input'], (batch_size, sequence_length))
-    prev_layer = tf.concat((output, audio), 0)
-    labels = tf.convert_to_tensor([[0.1]]*batch_size + [[0.9]]*batch_size)
-    with tf.variable_scope('discriminator'):
-        prev_layer = tf.reshape(prev_layer, (batch_size*2, sequence_length, 1, 1))
-        prev_layer = tf.layers.conv2d(prev_layer, 40, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_0')
-        prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d(prev_layer, 48, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_1')
-        prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d(prev_layer, 56, (9, 1), (6, 1), activation=tf.nn.relu, name='conv_2')
-        prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d(prev_layer, 64, (13, 1), (8, 1), activation=tf.nn.relu, name='conv_3')
-        prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.layers.conv2d(prev_layer, 72, (15, 1), (10, 1), activation=tf.nn.relu, name='conv_4')
-        prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-        prev_layer = tf.contrib.layers.flatten(prev_layer)
-        prev_layer = tf.layers.dense(prev_layer, 1024, activation=tf.nn.relu, name='fc_0')
-        prev_layer = tf.layers.dense(prev_layer, 256, activation=tf.nn.relu, name='fc_1')
-        prev_layer = tf.layers.dense(prev_layer, 64, activation=tf.nn.relu, name='fc_2')
-        logits = tf.layers.dense(prev_layer, 1, name="logits")
+    with tf.variable_scope("decoder"):
+        prev_layer = tf.reshape(encoding, (batch_size, variable_size, 1, 1))
+        for i, l in enumerate(layers[1:]):
+            if i != 0:
+                prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
+            prev_layer = tf.layers.conv2d_transpose(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, name='conv_transpose_%d'%i)
+            #print('dec', i, prev_layer.get_shape())
+        output = tf.layers.conv2d_transpose(prev_layer, 1, (1, 1), (1, 1), activation=tf.nn.tanh, name='output')    
+    
+    if mode == tf.estimator.ModeKeys.PREDICT:
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=tf.reshape(output, (batch_size, -1))))
 
     with tf.variable_scope('training'):
-        loss_disc = tf.losses.sigmoid_cross_entropy(labels, logits)
-        loss_gen = tf.losses.sigmoid_cross_entropy(1.0-labels, logits)
-        loss_sim = tf.reduce_mean(tf.maximum(0.0, 0.3 - tf.abs(output-tf.reduce_mean(output, 0, True))))
-        tf.summary.scalar("DiscriminatorLoss", loss_disc)
-        tf.summary.scalar("GeneratorLoss", loss_gen)
-        tf.summary.scalar("SimilarityLoss", loss_sim)
+        loss_mse = tf.losses.mean_squared_error(audio, output)
+        loss_latent = tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(var_mean) + tf.square(var_stddv) - tf.log(tf.square(var_stddv)) - 1.0, 1))
+        loss = loss_latent*0.2 + loss_mse
+        tf.summary.scalar('LossMSE', loss_mse)
+        tf.summary.scalar('LossLatent', loss_latent)
+        _, stddv = tf.nn.moments(output, 0)
+        stddv = tf.reduce_mean(stddv)
+        tf.summary.scalar('StandardDeviation', stddv)
         adam = tf.train.AdamOptimizer(learning_rate)
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            trainer_disc = adam.minimize(loss_disc, global_step=tf.train.get_global_step(), var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "discriminator"))
-            trainer_gen = adam.minimize(loss_gen*(1.0-loss_disc)**2+loss_sim*0.2, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "generator"))
-
+            trainer = adam.minimize(loss-stddv*0.5, global_step=tf.train.get_global_step())
+        
         return tf.estimator.EstimatorSpec(
             mode=mode,
-            loss=loss_disc+loss_gen+loss_sim,
-            train_op=tf.group(trainer_disc, trainer_gen))
+            loss=loss,
+            train_op=trainer)
