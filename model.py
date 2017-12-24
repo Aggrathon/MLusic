@@ -4,11 +4,80 @@
 import os
 import tensorflow as tf
 
-BATCH_SIZE = 32
-LEARNING_RATE = 2e-5
-SEQUENCE_LENGTH = 26743 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 1s)
-VARIABLE_SIZE = 100
+BATCH_SIZE = 8
+LEARNING_RATE = 1e-6
+SEQUENCE_LENGTH = 4841 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 1s)
+VARIABLE_SIZE = 200
 NETWORK_FOLDER = 'network'
+
+
+def encoder(input, training=True, variable_size=VARIABLE_SIZE, reuse=None):
+    """
+        Create an encoder for a variational autoencoder
+    """
+    with tf.variable_scope("Encoder"):
+        prev_layer = input
+        layers = [
+            (32, 5, 3),
+            (36, 5, 2),
+            (40, 5, 2),
+            (48, 3, 2),
+            (52, 3, 2)
+        ]
+        for i, l in enumerate(layers):
+            prev_layer = tf.layers.batch_normalization(prev_layer, training=training, reuse=reuse)
+            prev_layer = tf.layers.conv2d(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, reuse=reuse, name='conv_%d'%i)
+            print('enc', i, prev_layer.get_shape())
+        shape = prev_layer.get_shape()
+        prev_layer = tf.reshape(prev_layer, (shape[0], shape[1]*shape[3]))
+        var_stddv = tf.layers.dense(prev_layer, 1000, tf.nn.relu, reuse=reuse)
+        var_stddv = tf.layers.dense(var_stddv, variable_size, tf.nn.tanh, reuse=reuse, name='var_stddv')
+        var_mean = tf.layers.dense(prev_layer, 1000, tf.nn.relu, reuse=reuse)
+        var_mean = tf.layers.dense(var_mean, variable_size, tf.nn.tanh, reuse=reuse, name='var_mean')
+        return var_mean, var_stddv
+
+def decoder(input, training=True, reuse=None):
+    """
+        Create an decoder for a variational autoencoder
+    """
+    with tf.variable_scope("Decoder"):
+        shape = input.get_shape()
+        prev_layer = tf.reshape(input, (shape[0], shape[1], 1, 1))
+        layers = [
+            (48, 3, 2),
+            (40, 5, 2),
+            (36, 5, 2),
+            (32, 5, 3)
+        ]
+        for i, l in enumerate(layers):
+            if i != 0:
+                prev_layer = tf.layers.batch_normalization(prev_layer, training=training, reuse=reuse)
+            prev_layer = tf.layers.conv2d_transpose(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, reuse=reuse, name='conv_transpose_%d'%i)
+            print('dec', i, prev_layer.get_shape())
+        return tf.layers.conv2d_transpose(prev_layer, 1, (1, 1), (1, 1), activation=tf.nn.tanh, reuse=reuse, name='output')   
+
+def autoencoder_loss(input, output, var_mean, var_stddv):
+    """
+        Create loss for a variational autoencoder
+    """
+    with tf.variable_scope('Loss'):
+        # Standard Deviation Summaries
+        _, stddv = tf.nn.moments(output, 0)
+        stddv = tf.reduce_mean(stddv)
+        tf.summary.scalar('OutputDeviation', stddv)
+        _, stddv = tf.nn.moments(input, 0)
+        stddv = tf.reduce_mean(stddv)
+        tf.summary.scalar('InputDeviation', stddv)
+        # Losses
+        loss_mse = tf.losses.mean_squared_error(input, output)
+        tf.summary.scalar('MSE', loss_mse)
+        #input = 0.5+input*0.5
+        #output = 0.5+output*0.5
+        #loss_mse = -tf.reduce_mean(input * tf.log(output + 1e-8) + (1. - input) * tf.log((1. - output) + 1e-8))
+        #tf.summary.scalar('Log', loss_mse)
+        loss_latent = tf.reduce_mean(0.5 * tf.reduce_mean(tf.square(var_mean) + tf.square(var_stddv) - tf.log(tf.square(var_stddv)) - 1.0, 1))
+        tf.summary.scalar('Latent', loss_latent)
+        return loss_latent + loss_mse
 
 
 def model_fn(features, labels, mode, params=dict()):
@@ -20,57 +89,23 @@ def model_fn(features, labels, mode, params=dict()):
     sequence_length = params.get('sequence_length', SEQUENCE_LENGTH)
     variable_size = params.get('variable_size', VARIABLE_SIZE)
     training = mode == tf.estimator.ModeKeys.TRAIN
-    layers = [
-        (64, 9, 2),
-        (64, 7, 2),
-        (48, 7, 2),
-        (40, 5, 2),
-        (36, 5, 2),
-        (32, 5, 2),
-        (28, 5, 2),
-        (24, 3, 2),
-        (20, 3, 2)
-    ]
-
-    if mode != tf.estimator.ModeKeys.PREDICT:
-        audio = tf.reshape(features['input'], (batch_size, sequence_length, 1, 1))
-        with tf.variable_scope("encoder"):
-            prev_layer = audio
-            for i, l in enumerate(list(reversed(layers))):
-                prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-                prev_layer = tf.layers.conv2d(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, name='conv_transpose_%d'%i)
-                #print('enc', i, prev_layer.get_shape())
-            prev_layer = tf.reshape(prev_layer, (batch_size, -1))
-            var_stddv = tf.layers.dense(prev_layer, variable_size, tf.nn.tanh, name='var_stddv')
-            var_mean = tf.layers.dense(prev_layer, variable_size, tf.nn.tanh, name='var_mean')
-            encoding = tf.add(tf.random_normal([batch_size, variable_size], 0.0, 1.0, dtype=tf.float32)*var_stddv, var_mean, name="encoding")
-    else:
-        encoding = tf.random_normal((batch_size, variable_size), -1.0, 1.0, tf.float32, name='encoding')
-    
-    with tf.variable_scope("decoder"):
-        prev_layer = tf.reshape(encoding, (batch_size, variable_size, 1, 1))
-        for i, l in enumerate(layers[1:]):
-            if i != 0:
-                prev_layer = tf.layers.batch_normalization(prev_layer, training=training)
-            prev_layer = tf.layers.conv2d_transpose(prev_layer, l[0], (l[1], 1), (l[2], 1), activation=tf.nn.relu, name='conv_transpose_%d'%i)
-            #print('dec', i, prev_layer.get_shape())
-        output = tf.layers.conv2d_transpose(prev_layer, 1, (1, 1), (1, 1), activation=tf.nn.tanh, name='output')    
     
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=tf.reshape(output, (batch_size, -1))))
+        encoding = tf.random_normal((batch_size, variable_size), -1.0, 1.0, tf.float32, name='encoding')
+        output = decoder(encoding, False, False) 
+        output = tf.reshape(output, (batch_size, -1))
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=dict(output=output))
+
+    audio = tf.reshape(features['input'], (batch_size, sequence_length, 1, 1))
+    var_mean, var_stddv = encoder(audio, training, variable_size, False)
+    encoding = tf.add(tf.random_normal([batch_size, variable_size], 0.0, 1.0, dtype=tf.float32)*var_stddv, var_mean, name="encoding")
+    output = decoder(encoding, training, False)
+    loss = autoencoder_loss(audio, output, var_mean, var_stddv)
 
     with tf.variable_scope('training'):
-        loss_mse = tf.losses.mean_squared_error(audio, output)
-        loss_latent = tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(var_mean) + tf.square(var_stddv) - tf.log(tf.square(var_stddv)) - 1.0, 1))
-        loss = loss_latent*0.2 + loss_mse
-        tf.summary.scalar('LossMSE', loss_mse)
-        tf.summary.scalar('LossLatent', loss_latent)
-        _, stddv = tf.nn.moments(output, 0)
-        stddv = tf.reduce_mean(stddv)
-        tf.summary.scalar('StandardDeviation', stddv)
         adam = tf.train.AdamOptimizer(learning_rate)
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            trainer = adam.minimize(loss-stddv*0.5, global_step=tf.train.get_global_step())
+            trainer = adam.minimize(loss, global_step=tf.train.get_global_step())
         
         return tf.estimator.EstimatorSpec(
             mode=mode,
