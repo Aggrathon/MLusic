@@ -87,13 +87,18 @@ def input_fn():
             print("Could not read the data file")
             import sys
             sys.exit()
+        #for d in data:
+        #    yield d
         while True:
-            rnd = random.randrange(0, data.shape[0]-SEQUENCE_LENGTH)
-            yield data[rnd:rnd+SEQUENCE_LENGTH]
+            rnd = random.randrange(0, data.shape[0]-SEQUENCE_LENGTH-1)
+            yield data[rnd:rnd+SEQUENCE_LENGTH+1]
     dataset = tf.data.Dataset.from_generator(gen, tf.float32)
+    #dataset = dataset.cache().repeat()
+    #dataset = dataset.batch(SEQUENCE_LENGTH+1)
+    #dataset = dataset.shuffle(10000)
     dataset = dataset.batch(BATCH_SIZE)
     iterator = dataset.make_one_shot_iterator().get_next()
-    return {'input': iterator}, None
+    return {'input': iterator[:,:-1]}, {'output': iterator[:,-1:]}
 
 
 if __name__ == "__main__":

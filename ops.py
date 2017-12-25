@@ -9,27 +9,28 @@ def dilated_casual_gated_convolution(input, filters, reuse=None, name='conv_dcg'
     """
         Convolution for wavenet (simple implementation)
     """
-    tanh = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.tanh, reuse=reuse, name=name+'_filter')
-    gate = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.sigmoid, reuse=reuse, name=name+'_gate')
-    return tanh*gate
+    with tf.variable_scope(name):
+        tanh = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.tanh, reuse=reuse, name='filter')
+        gate = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.sigmoid, reuse=reuse, name='gate')
+        return tanh*gate
 
 def one_hot_mu_law(tensor, mu=256):
     """
     Get the onehot encoded tensor using mu-law scaling
     """
-    with tf.name_scope('one_hot_mu_law'):
+    with tf.variable_scope('one_hot_mu_law'):
         mu1 = tf.to_float(mu - 1)
         y = tf.sign(tensor)*tf.log1p(mu1*tf.abs(tensor))/tf.log1p(mu1)
         yt = tf.to_int32((y*0.5+0.5)*mu1)
-        one_hot = tf.one_hot(yt, mu, 0.9, 0.1)
+        one_hot = tf.one_hot(yt, mu, 0.9, 0.0)
         return one_hot
 
 def argmax_mu_law(tensor, mu=256):
     """
     Get the argmax tensor using mu-law scaling
     """
-    with tf.name_scope('argmax_mu_law'):
-        x = tf.argmax(tensor, 1, output_type=tf.float32)
+    with tf.variable_scope('argmax_mu_law'):
+        x = tf.to_float(tf.argmax(tensor, 1))
         mu1 = tf.to_float(mu - 1)
         xt = x/mu1*2.0-1.0
         y = (1.0 / mu1) * ((1.0 + mu1)**tf.abs(xt) - 1.0)

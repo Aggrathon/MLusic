@@ -4,10 +4,10 @@
 import tensorflow as tf
 from ops import dilated_casual_gated_convolution, one_hot_mu_law, argmax_mu_law
 
-BATCH_SIZE = 32
-LEARNING_RATE = 1e-4
-SEQUENCE_LENGTH = 2048 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 1s)
-MU = 255
+BATCH_SIZE = 64
+LEARNING_RATE = 1e-5
+SEQUENCE_LENGTH = 4096 #Based on the transpose convolutional layers (sequence_length/sample_rate ~= 1s)
+MU = 256
 NETWORK_FOLDER = 'network'
 
 
@@ -23,8 +23,9 @@ def model_fn(features, labels, mode, params=dict()):
     audio = features['input']
 
     prev_layer = tf.reshape(audio, (batch_size, sequence_length, 1, 1))
-    for i in range(11):
+    for i in range(12):
         prev_layer = dilated_casual_gated_convolution(prev_layer, 128, False, 'conv_dcg_%d'%i)
+    print(prev_layer.get_shape())
 
     prev_layer = tf.layers.dense(prev_layer, 128, tf.nn.relu)
     logits = tf.layers.dense(prev_layer, mu, name='logits')
