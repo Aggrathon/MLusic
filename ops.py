@@ -12,7 +12,10 @@ def dilated_casual_gated_convolution(input, filters, reuse=None, name='conv_dcg'
     with tf.variable_scope(name):
         tanh = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.tanh, reuse=reuse, name='filter')
         gate = tf.layers.conv2d(input, filters, (2, 1), (2, 1), 'valid', activation=tf.nn.sigmoid, reuse=reuse, name='gate')
-        return tanh*gate
+        residiual = tf.multiply(tanh, gate, name='residiual')
+        skip = tf.reshape(residiual[:,-1,0,:], (-1, filters))
+        skip = tf.layers.dense(skip, 1, activation=tf.nn.relu, name='skip')
+        return residiual, skip
 
 def one_hot_mu_law(tensor, mu=256):
     """

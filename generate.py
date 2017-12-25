@@ -10,31 +10,28 @@ from data import ffmpeg_write_audio, SAMPLE_RATE
 
 OUTPUT_FOLDER = 'output'
 
-def input_fn():
-    """
-        Empty input_fn for estimator
-    """
-    return dict(input=None), dict()
-
 def generate():
     tf.logging.set_verbosity(tf.logging.INFO)
-    placeholder = None
+    placeholder = []
     def input_fn():
-        global placeholder
-        placeholder = tf.placeholder(tf.float32, (1, SEQUENCE_LENGTH))
-        return dict(input=placeholder), None
-    song = [np.clip(np.random.normal(0.0, 0.3), -1.0, 1.0) for n in range(SEQUENCE_LENGTH)]
+        nonlocal placeholder
+        placeholder = tf.placeholder(tf.float32, (SEQUENCE_LENGTH))
+        return dict(input=tf.reshape(placeholder, (1, SEQUENCE_LENGTH))), None
+    song = [np.clip(np.random.uniform(-1.0, 1.0), -1.0, 1.0) for i in range(SEQUENCE_LENGTH)]
     def feed_fn():
-        global song
-        global placeholder
+        nonlocal placeholder, song
         return { placeholder: song[-SEQUENCE_LENGTH:] }
     model = tf.estimator.Estimator(model_fn, NETWORK_FOLDER, params=dict(batch_size=1))
     for i, res in enumerate(model.predict(input_fn, hooks=[tf.train.FeedFnHook(feed_fn)])):
-        song.append(res['output'][0])
-        if i > SEQUENCE_LENGTH*2+SAMPLE_RATE*10:
+        song.append(res['output'])
+        if (i - SEQUENCE_LENGTH)%SAMPLE_RATE == 0:
+            print((i - SEQUENCE_LENGTH)//SAMPLE_RATE, 'seconds')
+        if i > SEQUENCE_LENGTH+SAMPLE_RATE*10:
             break
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-    ffmpeg_write_audio(os.path.join(OUTPUT_FOLDER, 'wavenet_{:%y%m%d%H%M%S}.wav'.format(datetime.now())), song[SEQUENCE_LENGTH*2:])
+    ffmpeg_write_audio(
+        os.path.join(OUTPUT_FOLDER, 'wavenet_{:%y%m%d%H%M%S}.wav'.format(datetime.now())), 
+        np.asarray(song[SEQUENCE_LENGTH:]))
 
 if __name__ == "__main__":
     generate()
