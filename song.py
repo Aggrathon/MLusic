@@ -91,7 +91,7 @@ class Song(object):
     @staticmethod
     def read_csv_file(file_name):
         self = Song(file_name[file_name.rfind(os.path.sep)+1:file_name.rfind(".")])
-        with open(file_name, "r") as file:
+        with open(file_name, "r", encoding="utf8", errors='ignore') as file:
             lines = file.readlines()
             self.ticks_per_quarter = int(lines[0][lines[0].rfind(",")+2:])
 
@@ -150,7 +150,7 @@ class Song(object):
         instruments = {ins: i for i, ins in enumerate(instument_set)}
         if file_name is None:
             file_name = os.path.join(OUTPUT_FOLDER, self.name+".csv")
-        with open(file_name, "w") as file:
+        with open(file_name, "w", encoding="utf8") as file:
             file.write("0, 0, Header, 1, {}, {}\n".format(2, self.ticks_per_quarter))
             file.write("1, 0, Start_track\n")
             file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit))))

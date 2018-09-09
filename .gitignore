@@ -157,3 +157,4 @@ network/*
 !input/Midicsv.exe
 !input/midicsv
 !output/csvmidi
+data/*
