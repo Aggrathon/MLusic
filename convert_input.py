@@ -2,14 +2,19 @@
     Script for converting input midi:s to csv:s
 """
 import platform
-from path import Path
 import subprocess
+from path import Path
+from song import Song
 
 INPUT_FOLDER = Path("input")
+DATA_FILE = INPUT_FOLDER / "data.csv"
 
-def check_input_converter():
+def check_input_converter() -> Path:
     """
-        Check if the executable exists
+    Check if the midi to csv executable exists
+
+    Returns:
+        Path -- The executable (None if not found)
     """
     system = platform.system()
     if system == 'Windows':
@@ -42,7 +47,7 @@ def convert_inputs(reconvert=False):
     print("Converting all midis in the", INPUT_FOLDER, "folder to csvs")
     midis = INPUT_FOLDER.files("*.mid*")
     csvs = INPUT_FOLDER.files("*.csv")
-    if len(midis) > 0:
+    if midis:
         for midi in midis:
             csv = midi.replace(".midi", ".csv").replace(".mid", ".csv")
             if csv in csvs and not reconvert:
@@ -53,6 +58,22 @@ def convert_inputs(reconvert=False):
     else:
         print("No midis found")
 
+def process_inputs(overwrite=False):
+    """
+    Convert all the input midi csvs into the data format and combine them
+
+    Keyword Arguments:
+        overwrite {bool} -- If the data file exists should it be recreated (default: {False})
+
+    Returns:
+        Song -- the combined midis
+    """
+    if DATA_FILE.exists() and not overwrite:
+        print("Data file already exists")
+        return
+    print("Processing the csvs")
+    return Song.read_folder(INPUT_FOLDER).save_data(DATA_FILE)
 
 if __name__ == "__main__":
     convert_inputs()
+    process_inputs()

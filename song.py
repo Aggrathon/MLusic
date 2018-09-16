@@ -1,13 +1,23 @@
+"""
+    Script for processing files
+"""
 
-import os
-import datetime
 from math import log2
 from path import Path
 import numpy as np
 
 PERCUSSION_INSTRUMENT = 128
 
-class Song(object):
+class FileFormatException(Exception):
+    """
+        Exception for when a file is not in the expected format
+    """
+    pass
+
+class Song():
+    """
+        Class for processing songs between midi and data formats
+    """
 
     def __init__(self):
         self.bar_length = 4
@@ -15,8 +25,8 @@ class Song(object):
         self.tempo = 500000
         self.ticks_per_quarter = 192
         self.instruments = []
-        self.notes = [] #lists of onehot values [[instrument, note]]
-        self.times = [] #lists of continous values [[time, duration, velocity]]
+        self.notes = np.zeros((0, 2), dtype=np.int32) #lists of onehot values [[instrument, note]]
+        self.times = np.zeros((0, 3), dtype=np.float32) #lists of continous values [[time, duration, velocity]]
 
     def __start_note(self, index, time, track, channel, note, velocity):
         instrument = self.instruments[track*16+channel]
@@ -33,17 +43,27 @@ class Song(object):
                 self.times[i, 1] = time - self.times[i, 0]
                 return
 
-    def read_csv_file(self, file):
+    def read_csv(self, filename):
+        """
+        Read a midi csv and process the notes
+
+        Arguments:
+            filename {str} -- The input midi csv
+
+        Returns:
+            Song -- self for chaining
+        """
         self.instruments = [0]*16
         self.instruments[9] = PERCUSSION_INSTRUMENT
-        with open(file, "r", encoding="utf8", errors="ignore") as f:
-            lines = f.readlines()
-            if not lines or len(lines) == 0:
-                print("Error reading file:", file)
-                return self
+        with open(filename, "r", encoding="utf8", errors="ignore") as file:
+            lines = file.readlines()
+            if not lines:
+                raise FileFormatException(filename)
         self.notes = np.zeros((len(lines), 2), dtype=np.int32)
         self.times = np.zeros((len(lines), 3), dtype=np.float32)
         header = lines[0].split(", ")
+        if len(header) != 6 or header[2] != "Header":
+            raise FileFormatException(filename)
         self.instruments = self.instruments * (int(header[-2])+1)
         self.ticks_per_quarter = int(header[-1])
         index = 0
@@ -79,7 +99,16 @@ class Song(object):
             assert len(self.instruments) <= 16
         return self
 
-    def save_to_file(self, file_name):
+    def save_midi(self, file_name="song.csv"):
+        """
+        Save the song as a csv midi file
+
+        Arguments:
+            file_name {str} -- The output file
+
+        Returns:
+            Song -- self for chaining
+        """
         instruments = {i: c for c, i in enumerate(self.instruments)}
         instruments[PERCUSSION_INSTRUMENT] = 9
         with open(file_name, "w") as file:
@@ -98,7 +127,8 @@ class Song(object):
             for note, time in zip(self.notes, self.times):
                 tot += time[0]
                 tick = int(tot * to_tick)
-                notes.append((tick, "2, {}, Note_on_c, {}, {}, {}\n".format(tick, instruments[note[0]], note[1], int(time[2]*127))))
+                notes.append((tick, "2, {}, Note_on_c, {}, {}, {}\n"
+                              .format(tick, instruments[note[0]], note[1], int(time[2]*127))))
                 tick = int((tot+time[1]) * to_tick)
                 notes.append((tick, "2, {}, Note_off_c, {}, {}, 0\n".format(tick, instruments[note[0]], note[1])))
             notes.sort()
@@ -107,8 +137,77 @@ class Song(object):
             end = int(notes[-1][1].split(", ")[1])
             file.write("2, {}, End_track\n".format(end+1))
             file.write("0, {}, End_of_file\n".format(end+2))
+        return self
 
+    def save_data(self, filename="data.csv"):
+        """
+        Save the processed notes to a data file (.csv format)
 
-if __name__ == "__main__":
-    s = Song().read_csv_file("input/2_Minutes_To_Midnight.csv")
-    s.save_to_file("output/example.csv")
+        Arguments:
+            filename {str} -- The output file
+
+        Returns:
+            Song -- self for chaining
+        """
+        with open(filename, "w", encoding="utf8") as file:
+            file.write('"deltaTime","duration","instrument","tone","velocity"')
+            for note, time in zip(self.notes, self.times):
+                file.write("%f,%f,%d,%d,%f\n"%(time[0], time[1], note[0], note[1], time[2]))
+        return self
+
+    def read_data(self, filename):
+        """
+        Read the notes from a processed data file
+
+        Arguments:
+            filename {str} -- The file to read
+
+        Returns:
+            Song -- self for chaining
+        """
+        with open(filename, "r", encoding="utf8") as file:
+            lines = file.readlines()[1:]
+        self.notes = np.zeros((len(lines), 2))
+        self.times = np.zeros((len(lines), 3))
+        for i, line in enumerate(lines):
+            split = line.split(",")
+            self.times[i, 0] = float(split[0])
+            self.times[i, 1] = float(split[1])
+            self.notes[i, 0] = int(split[2])
+            self.notes[i, 1] = int(split[3])
+            self.times[i, 2] = float(split[4])
+        return self
+
+    def combine(self, other):
+        """
+        Add the notes from another song at the end
+
+        Arguments:
+            other {Song} -- The song with the notes to add
+
+        Returns:
+            Song -- self for chaining
+        """
+        self.times = np.concatenate((self.times, other.times), 0)
+        self.notes = np.concatenate((self.notes, other.notes), 0)
+        return self
+
+    @staticmethod
+    def read_folder(folder):
+        """
+        Read all midi csvs in afolderand combine them
+
+        Arguments:
+            folder {str} -- The folder to read from
+
+        Returns:
+            Song -- A song with the combined folder content
+        """
+        folder = Path(folder)
+        song = Song()
+        for file in folder.files("*.csv"):
+            try:
+                song.combine(Song().read_csv(file))
+            except FileFormatException:
+                pass
+        return song
