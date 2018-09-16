@@ -13,6 +13,6 @@ As a bridge between python and midi the tool from
 Before being used for learning the songs are stripped of any percussion, short decorative tracks or really short notes.
 
 ## Usage
- 1. Put your learning midi files in the input folder
+ 1. Put your midi files in the input folder
  2. Convert them to csv-files using: &nbsp; &nbsp; `python convert_input.py`  
     - If not on Windows you must compile the midi-csv utility first

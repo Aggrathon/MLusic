@@ -150,7 +150,7 @@ class Song():
             Song -- self for chaining
         """
         with open(filename, "w", encoding="utf8") as file:
-            file.write('"deltaTime","duration","instrument","tone","velocity"')
+            #file.write('"deltaTime","duration","instrument","tone","velocity"')
             for note, time in zip(self.notes, self.times):
                 file.write("%f,%f,%d,%d,%f\n"%(time[0], time[1], note[0], note[1], time[2]))
         return self
