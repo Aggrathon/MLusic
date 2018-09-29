@@ -90,7 +90,7 @@ class Song():
         to_ms = (60000 / (self.tempo * self.ticks_per_quarter)) #Convert to ms
         self.times[1:, 0] = (self.times[1:, 0] - self.times[:-1, 0]) * to_ms # Relative times
         self.times[:, 1] = self.times[:, 1] * to_ms
-        self.times[0, 0] = 100
+        self.times[0, 0] = 10
         self.instruments = sorted(list(set(self.instruments)))
         if len(self.instruments) > 10:
             i = self.instruments.index(PERCUSSION_INSTRUMENT)
@@ -167,16 +167,38 @@ class Song():
         """
         with open(filename, "r", encoding="utf8") as file:
             lines = file.readlines()[1:]
-        self.notes = np.zeros((len(lines), 2))
-        self.times = np.zeros((len(lines), 3))
+        notes = np.zeros((len(lines), 2))
+        times = np.zeros((len(lines), 3))
         for i, line in enumerate(lines):
             split = line.split(",")
-            self.times[i, 0] = float(split[0])
-            self.times[i, 1] = float(split[1])
-            self.notes[i, 0] = int(split[2])
-            self.notes[i, 1] = int(split[3])
-            self.times[i, 2] = float(split[4])
+            times[i, 0] = float(split[0])
+            times[i, 1] = float(split[1])
+            notes[i, 0] = int(split[2])
+            notes[i, 1] = int(split[3])
+            times[i, 2] = float(split[4])
+        self.set_data(times, notes)
         return self
+    
+    def set_data(self, times, notes):
+        """
+        Set the notes directly
+
+        Arguments:
+            times {np.array} -- Numpy array with the note times
+            notes {np.array} -- Numpy array with the note ton
+
+        Returns:
+            Song -- self for chaining
+        """
+        self.times = times
+        self.notes = notes
+        self.instruments = list(np.unique(self.notes[:, 0]))
+        perc = self.instruments.index(PERCUSSION_INSTRUMENT)
+        if perc > 9:
+            self.instruments[perc] = self.instruments[9]
+            self.instruments[9] = PERCUSSION_INSTRUMENT
+        return self
+
 
     def combine(self, other):
         """

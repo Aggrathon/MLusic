@@ -73,10 +73,11 @@ def save_and_convert_song(song: Song, filename: str, play_on_finished: bool = Tr
     """
     song.save_midi(filename)
     exe = check_output_converter()
+    output = filename[:-4]+".midi"
     if exe is not None:
-        subprocess.run([exe, "-v", filename, filename[:-4]+".midi"], shell=False)
+        subprocess.run([exe, "-v", filename, output], shell=False)
         if play_on_finished:
-            os.startfile(filename[:-4]+".midi")
+            os.startfile(output)
 
 if __name__ == "__main__":
     convert_outputs()
