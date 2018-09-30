@@ -7,6 +7,7 @@ from path import Path
 import numpy as np
 
 PERCUSSION_INSTRUMENT = 128
+RESOLUTION = 40
 
 class FileFormatException(Exception):
     """
@@ -25,8 +26,8 @@ class Song():
         self.tempo = 500000
         self.ticks_per_quarter = 192
         self.instruments = []
-        self.notes = np.zeros((0, 2), dtype=np.int32) #lists of onehot values [[instrument, note]]
-        self.times = np.zeros((0, 3), dtype=np.float32) #lists of continous values [[time, duration, velocity]]
+        self.notes = np.zeros((0, 2), dtype=np.int32) #array of onehot values [[instrument, note]]
+        self.times = np.zeros((0, 3), dtype=np.float32) #array of continous values [[time, duration, velocity]]
 
     def __start_note(self, index, time, track, channel, note, velocity):
         instrument = self.instruments[track*16+channel]
@@ -90,7 +91,9 @@ class Song():
         to_ms = (60000 / (self.tempo * self.ticks_per_quarter)) #Convert to ms
         self.times[1:, 0] = (self.times[1:, 0] - self.times[:-1, 0]) * to_ms # Relative times
         self.times[:, 1] = self.times[:, 1] * to_ms
-        self.times[0, 0] = 10
+        self.times[0, 0] = 0.1
+        self.times[:, 0] = np.round(self.times[:, 0]*RESOLUTION)/RESOLUTION
+        self.times[:, 1] = np.round(self.times[:, 1]*RESOLUTION + 0.2)/RESOLUTION
         self.instruments = sorted(list(set(self.instruments)))
         if len(self.instruments) > 10:
             i = self.instruments.index(PERCUSSION_INSTRUMENT)
@@ -111,31 +114,50 @@ class Song():
         """
         instruments = {i: c for c, i in enumerate(self.instruments)}
         instruments[PERCUSSION_INSTRUMENT] = 9
+        max_index = len(self.instruments)
+        if max_index > 25:
+            index = 25
+            while index < len(self.instruments):
+                instruments[self.instruments[index]] = max_index
+                max_index += 1
+                index += 16
+        tracks = dict()
+        for i in self.instruments:
+            tracks[i] = instruments[i] // 16 + 2
+            instruments[i] = instruments[i] % 16
+        num_tracks = (max_index-1)//16+1
         with open(file_name, "w") as file:
             file.write("0, 0, Header, 1, {}, {}\n".format(2, self.ticks_per_quarter))
             file.write("1, 0, Start_track\n")
             file.write("1, 0, Time_signature, {}, {}, 24, 8\n".format(self.bar_length, int(log2(self.beat_unit))))
             file.write("1, 0, Tempo, {}\n".format(self.tempo))
             file.write("1, 0, End_track\n")
-            file.write("2, 0, Start_track\n")
-            for i, ins in enumerate(self.instruments):
-                if ins != PERCUSSION_INSTRUMENT:
-                    file.write("2, 0, Program_c, {}, {}\n".format(i, ins))
-            notes = []
-            tot = -self.times[0, 0]
-            to_tick = (self.tempo * self.ticks_per_quarter) / 60000
-            for note, time in zip(self.notes, self.times):
-                tot += time[0]
-                tick = int(tot * to_tick)
-                notes.append((tick, "2, {}, Note_on_c, {}, {}, {}\n"
-                              .format(tick, instruments[note[0]], note[1], int(time[2]*127))))
-                tick = int((tot+time[1]) * to_tick)
-                notes.append((tick, "2, {}, Note_off_c, {}, {}, 0\n".format(tick, instruments[note[0]], note[1])))
-            notes.sort()
-            for _, line in notes:
-                file.write(line)
-            end = int(notes[-1][1].split(", ")[1])
-            file.write("2, {}, End_track\n".format(end+1))
+            end = 0
+            for i in range(num_tracks):
+                file.write("{}, 0, Start_track\n".format(i + 2))
+                for  ins in self.instruments:
+                    j = tracks[ins]
+                    if ins != PERCUSSION_INSTRUMENT and j == i+2:
+                        file.write("{}, 0, Program_c, {}, {}\n".format(j, instruments[ins], ins))
+                notes = []
+                tot = -self.times[0, 0]
+                to_tick = (self.tempo * self.ticks_per_quarter) / 60000
+                for note, time in zip(self.notes, self.times):
+                    tot += time[0]
+                    track = tracks[note[0]]
+                    if track != i+2:
+                        continue
+                    tick = int(tot * to_tick)
+                    instrument = instruments[note[0]]
+                    notes.append((tick, "{}, {}, Note_on_c, {}, {}, {}\n"
+                                .format(track, tick, instrument, note[1], int(time[2]*127))))
+                    tick = int((tot+time[1]) * to_tick)
+                    notes.append((tick, "{}, {}, Note_off_c, {}, {}, 0\n".format(track, tick, instrument, note[1])))
+                notes.sort()
+                for _, line in notes:
+                    file.write(line)
+                end = max(end, int(notes[-1][1].split(", ")[1]))
+                file.write("{}, {}, End_track\n".format(i + 2, end+1))
             file.write("0, {}, End_of_file\n".format(end+2))
         return self
 
@@ -167,7 +189,7 @@ class Song():
         """
         with open(filename, "r", encoding="utf8") as file:
             lines = file.readlines()[1:]
-        notes = np.zeros((len(lines), 2))
+        notes = np.zeros((len(lines), 2), dtype=np.int32)
         times = np.zeros((len(lines), 3))
         for i, line in enumerate(lines):
             split = line.split(",")
@@ -210,8 +232,7 @@ class Song():
         Returns:
             Song -- self for chaining
         """
-        self.times = np.concatenate((self.times, other.times), 0)
-        self.notes = np.concatenate((self.notes, other.notes), 0)
+        self.set_data(np.concatenate((self.times, other.times), 0), np.concatenate((self.notes, other.notes), 0))
         return self
 
     @staticmethod

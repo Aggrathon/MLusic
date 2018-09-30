@@ -77,7 +77,7 @@ def save_and_convert_song(song: Song, filename: str, play_on_finished: bool = Tr
     if exe is not None:
         subprocess.run([exe, "-v", filename, output], shell=False)
         if play_on_finished:
-            os.startfile(output)
+            os.startfile(output.replace('\\', '\\\\'))
 
 if __name__ == "__main__":
     convert_outputs()
