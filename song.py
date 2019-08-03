@@ -150,7 +150,7 @@ class Song():
                     tick = int(tot * to_tick)
                     instrument = instruments[note[0]]
                     notes.append((tick, "{}, {}, Note_on_c, {}, {}, {}\n"
-                                .format(track, tick, instrument, note[1], int(time[2]*127))))
+                                  .format(track, tick, instrument, note[1], int(time[2]*127))))
                     tick = int((tot+time[1]) * to_tick)
                     notes.append((tick, "{}, {}, Note_off_c, {}, {}, 0\n".format(track, tick, instrument, note[1])))
                 notes.sort()
@@ -200,14 +200,14 @@ class Song():
             times[i, 2] = float(split[4])
         self.set_data(times, notes)
         return self
-    
+
     def set_data(self, times, notes):
         """
         Set the notes directly
 
         Arguments:
             times {np.array} -- Numpy array with the note times
-            notes {np.array} -- Numpy array with the note ton
+            notes {np.array} -- Numpy array with the note tones
 
         Returns:
             Song -- self for chaining
@@ -238,7 +238,7 @@ class Song():
     @staticmethod
     def read_folder(folder):
         """
-        Read all midi csvs in afolderand combine them
+        Read all midi csvs in a folder and combine them
 
         Arguments:
             folder {str} -- The folder to read from
