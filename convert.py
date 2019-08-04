@@ -33,17 +33,18 @@ def read_csv(filename):
     if len(header) != 6 or header[2] != "Header":
         raise FileFormatException(filename)
     instruments = instruments * (int(header[-2])+1)
+    lines = [(int(l[1]), int(l[0]), *l[2:]) for l in (line.split(", ") for line in lines)]
+    lines.sort(key=lambda a: (a[0], a[1], a[2].startswith("n")))
     for line in lines:
-        split = line.split(", ")
-        if split[2] == "Note_on_c":
-            if int(split[-1]) == 0:  # Velocity == 0
-                output.append((int(split[1]), instruments[int(split[0])*16 + int(split[3])], int(split[-2]), 0))
+        if line[2] == "Note_on_c":
+            if int(line[-1]) == 0:  # Velocity == 0
+                output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
             else:
-                output.append((int(split[1]), instruments[int(split[0])*16 + int(split[3])], int(split[-2]), 1))
-        elif split[2] == "Note_off_c":
-            output.append((int(split[1]), instruments[int(split[0])*16 + int(split[3])], int(split[-2]), 0))
-        elif split[2] == "Program_c":
-            instruments[int(split[0])*16 + int(split[3])] = int(split[4])
+                output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 1))
+        elif line[2] == "Note_off_c":
+            output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
+        elif line[2] == "Program_c":
+            instruments[line[1]*16 + int(line[3])] = int(line[4])
     output.sort()
     return output
 
@@ -64,10 +65,10 @@ def read_folder(folder: Path):
     for file in filter_folder_files(folder, ".csv"):
         try:
             out = read_csv(file)
-            for note in out:
-                note[0] = note[0] + time
-                output.append(note)
-            time = output[-1][0]
+            if out:
+                for note in out:
+                    output.append((note[0] + time, *note[1:]))
+                time = output[-1][0]
         except FileFormatException:
             pass
     return output
