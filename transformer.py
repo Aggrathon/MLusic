@@ -11,10 +11,10 @@ import numpy as np
 from convert_input import DATA_FILE, META_FILE
 
 
-SEQUENCE_LENGTH = 129
+SEQUENCE_LENGTH = 513
 BATCH_SIZE = 256
 LEARNING_RATE = 1e-4
-CHECKPOINT_PATH = "./checkpoints"
+CHECKPOINT_PATH = "./network/transformer_midi"
 
 
 def _input(input=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LENGTH):
@@ -39,7 +39,7 @@ def _input(input=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LE
             shuffle=False,
             header=False)
         data = data.map(lambda row: (
-            tf.cast(row["time"] - tf.reduce_min(row["time"]), tf.float32)/1000,
+            tf.cast(tf.cast(row["time"] - tf.reduce_min(row["time"]), tf.float64)/100_000, tf.float32),
             row["instrument"],
             tf.cast(row["note"], tf.float32),
             tf.cast(row["state"], tf.float32)))
@@ -274,14 +274,9 @@ def train():
     loss_note = tf.keras.metrics.Mean(name='loss_note')
     loss_time = tf.keras.metrics.Mean(name='loss_time')
     loss_inst = tf.keras.metrics.Mean(name='loss_inst')
+    data = enumerate(data)
+    next(data)
     try:
-        loss_total.reset_states()
-        loss_state.reset_states()
-        loss_note.reset_states()
-        loss_time.reset_states()
-        loss_inst.reset_states()
-        data = enumerate(data)
-        next(data)
         start = timer()
         print("Starting training")
         for (i, (time, instrument, note, state)) in data:
@@ -291,7 +286,7 @@ def train():
             loss_note(loss[3])
             loss_state(loss[4])
             loss_total(loss[0])
-            if i % 100 == 0:
+            if i % 20 == 0:
                 print("Batch: {:6d}      Loss: {:4.2f} ({:4.2f} {:4.2f} {:4.2f} {:4.2f})      Time: {:6.2f}".format(
                     i,
                     loss_total.result(),
@@ -300,7 +295,7 @@ def train():
                     loss_note.result(),
                     loss_state.result(),
                     timer() - start))
-                if i % 1000 == 0:
+                if i % 500 == 0:
                     print("Saving checkpoint")
                     manager.save()
                     loss_total.reset_states()

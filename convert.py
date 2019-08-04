@@ -32,29 +32,40 @@ def read_csv(filename):
     header = lines[0].split(", ")
     if len(header) != 6 or header[2] != "Header":
         raise FileFormatException(filename)
-    instruments = instruments * (int(header[-2])+1)
+    instruments = instruments * (int(header[-2]) + 1)
+    ticks_per_quarter = int(header[-1])
+    tempo = 500_000
+    last_tempo_tick = 0
+    last_tempo_time = 0
     lines = [(int(l[1]), int(l[0]), *l[2:]) for l in (line.split(", ") for line in lines)]
     lines.sort(key=lambda a: (a[0], a[1], a[2].startswith("n")))
     for line in lines:
         if line[2] == "Note_on_c":
+            time = ((line[0] - last_tempo_tick) * tempo) // ticks_per_quarter + last_tempo_time
             if int(line[-1]) == 0:  # Velocity == 0
-                output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
+                output.append((time, instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
             else:
-                output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 1))
+                output.append((time, instruments[line[1]*16 + int(line[3])], int(line[-2]), 1))
         elif line[2] == "Note_off_c":
-            output.append((line[0], instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
+            time = ((line[0] - last_tempo_tick) * tempo) // ticks_per_quarter + last_tempo_time
+            output.append((time, instruments[line[1]*16 + int(line[3])], int(line[-2]), 0))
         elif line[2] == "Program_c":
             instruments[line[1]*16 + int(line[3])] = int(line[4])
+        elif line[2] == "Tempo":
+            last_tempo_time += ((line[0] - last_tempo_tick) * tempo) // ticks_per_quarter
+            last_tempo_tick = line[0]
+            tempo = int(line[3])
     output.sort()
     return output
 
 
-def read_folder(folder: Path):
+def read_folder(folder: Path, time_precision: int = 10):
     """
     Read all midi csvs in a folder and combine them
 
     Arguments:
-        folder {str} -- The folder to read from
+        folder {Path} -- The folder to read from
+        time_precision {int} -- Reduce the time precision from 1 microseconds when combining multiple files
 
     Returns:
         list((time, instument, note, status),)
@@ -73,7 +84,7 @@ def read_folder(folder: Path):
                     if instruments[note[1]] == -1:
                         instruments[note[1]] = inst_ind
                         inst_ind += 1
-                    output.append((note[0] + time, instruments[note[1]], note[2], note[3]))
+                    output.append((note[0] // time_precision + time, instruments[note[1]], note[2], note[3]))
                 time = output[-1][0]
         except FileFormatException:
             pass
