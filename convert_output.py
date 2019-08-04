@@ -4,8 +4,8 @@
 import platform
 import subprocess
 import os
-from path import Path
-from song import Song
+from pathlib import Path
+from convert import filter_folder_files
 
 OUTPUT_FOLDER = Path("output")
 
@@ -20,7 +20,7 @@ def check_output_converter():
     system = platform.system()
     if system == 'Windows':
         path = OUTPUT_FOLDER / "Csvmidi.exe"
-        if path.isfile():
+        if path.is_file():
             return path
         else:
             print("Could not find the executable for turning csvs into midis")
@@ -28,7 +28,7 @@ def check_output_converter():
             print("Then put the Csvmidi.exe file in the "+OUTPUT_FOLDER+" folder")
     else:
         path = OUTPUT_FOLDER / "csvmidi"
-        if path.isfile():
+        if path.is_file():
             return path
         else:
             print("Could not find the executable for turning csvs into midis")
@@ -47,8 +47,8 @@ def convert_outputs(reconvert=False):
     if exe is None:
         return
     print("Converting all csvs in the", OUTPUT_FOLDER, "folder to midis")
-    csvs = OUTPUT_FOLDER.files("*.csv")
-    midis = OUTPUT_FOLDER.files("*.mid*")
+    csvs = list(filter_folder_files(OUTPUT_FOLDER, "csv"))
+    midis = list(filter_folder_files(OUTPUT_FOLDER, "mid")) + list(filter_folder_files(OUTPUT_FOLDER, "midi"))
     if csvs:
         for csv in csvs:
             midi = csv.replace(".csv", ".midi")
@@ -60,7 +60,7 @@ def convert_outputs(reconvert=False):
     else:
         print("No csvs found")
 
-def save_and_convert_song(song: Song, filename: str, play_on_finished: bool = True):
+def save_and_convert_song(song, filename: str, play_on_finished: bool = True):
     """
     Convert a Song to midi
 
@@ -71,6 +71,7 @@ def save_and_convert_song(song: Song, filename: str, play_on_finished: bool = Tr
     Keyword Arguments:
         play_on_finished {bool} -- Play the resulting midi file with the default program (default: {True}, only on Windows)
     """
+    #TODO: Update this function
     song.save_midi(filename)
     exe = check_output_converter()
     output = filename[:-4]+".midi"
