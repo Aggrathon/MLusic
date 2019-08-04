@@ -58,20 +58,27 @@ def read_folder(folder: Path):
 
     Returns:
         list((time, instument, note, status),)
+        list((instrument_id, instrument),)
     """
     folder = Path(folder)
     output = []
     time = 0
+    instruments = [-1] * (PERCUSSION_INSTRUMENT + 1)
+    inst_ind = 0
     for file in filter_folder_files(folder, ".csv"):
         try:
             out = read_csv(file)
             if out:
                 for note in out:
-                    output.append((note[0] + time, *note[1:]))
+                    if instruments[note[1]] == -1:
+                        instruments[note[1]] = inst_ind
+                        inst_ind += 1
+                    output.append((note[0] + time, instruments[note[1]], note[2], note[3]))
                 time = output[-1][0]
         except FileFormatException:
             pass
-    return output
+    instruments = sorted([(ins, i) for i, ins in enumerate(instruments) if ins != -1])
+    return output, instruments
 
 
 def filter_folder_files(folder: Path, extension: str):

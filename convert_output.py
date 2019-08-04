@@ -71,7 +71,7 @@ def save_and_convert_song(song, filename: str, play_on_finished: bool = True):
     Keyword Arguments:
         play_on_finished {bool} -- Play the resulting midi file with the default program (default: {True}, only on Windows)
     """
-    #TODO: Update this function
+    #TODO: Update this to use "pseudo" midi:s
     song.save_midi(filename)
     exe = check_output_converter()
     output = filename[:-4]+".midi"

@@ -8,6 +8,7 @@ from convert import read_folder, filter_folder_files
 
 INPUT_FOLDER = Path("input")
 DATA_FILE = INPUT_FOLDER / "data.csv"
+META_FILE = INPUT_FOLDER / "meta.csv"
 
 def check_input_converter() -> Path:
     """
@@ -62,13 +63,19 @@ def process_inputs(recombine=False):
     """
     Convert all the input midi csvs into the data format and combine them
     """
-    if not DATA_FILE.exists() or recombine:
+    print("Converting all csv-midi to pseudo-midi and combining them")
+    if not DATA_FILE.exists() or not META_FILE.exists() or recombine:
         if DATA_FILE.exists():
             DATA_FILE.unlink()
-        output = read_folder(INPUT_FOLDER)
+        if META_FILE.exists():
+            META_FILE.unlink()
+        output, instruments = read_folder(INPUT_FOLDER)
         with open(DATA_FILE, "w", encoding="utf8") as file:
             for note in output:
                 file.write("%d, %d, %d, %d\n"%note)
+        with open(META_FILE, "w", encoding="utf8") as file:
+            for ins in instruments:
+                file.write("%d, %d\n"%ins)
 
 if __name__ == "__main__":
     convert_inputs()
