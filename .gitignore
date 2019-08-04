@@ -155,4 +155,4 @@ output/*
 !output/convert*.py
 data
 network
-
+checkpoints
