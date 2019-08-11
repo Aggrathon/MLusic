@@ -53,11 +53,13 @@ def _input_tf(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_
             tf.cast(row["note"], tf.float32),
             tf.cast(row["state"], tf.float32)))
     data = data.shuffle(batch*80).batch(batch)
+    return data.prefetch(tf.data.experimental.AUTOTUNE)
+
+def _input_max_ins():
     num_instruments = 129
     with open(META_FILE) as file:
         num_instruments = len(file.readlines())
-    return data.prefetch(tf.data.experimental.AUTOTUNE), num_instruments
-
+    return num_instruments
 
 def _input_np(file=DATA_FILE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
     """
@@ -82,21 +84,20 @@ def _input_np(file=DATA_FILE, sequence: int = SEQUENCE_LENGTH, relative: bool = 
             time = np.concatenate(([0], ((time[1:] - time[:-1]).astype(np.float64)/100_000).astype(np.float32)))
         else:
             time = ((time - np.min(time)).astype(np.float64)/100_000).astype(np.float32)
-    num_instruments = 129
-    with open(META_FILE) as file:
-        num_instruments = len(file.readlines())
-    return (time, np.asarray(inst), np.asarray(note), np.asarray(stat)), num_instruments
+    return (time, np.asarray(inst), np.asarray(note), np.asarray(stat))
 
 def _output(time, instrument, note, state, file=OUTPUT_FOLDER / (uuid4().hex + ".csv"), relative: bool = True):
     print("Saving to", file)
     if relative:
+        time = np.asarray(time)
         time = (time.astype(np.float64)*1_000_000).astype(np.int32)
         for i in range(1, len(time)):
             time[i] += time[i-1]
     else:
         time = (time.astype(np.float64)*1_000_000).astype(np.int32)
-    state = state.astype(np.int32)
-    note = note.astype(np.int32)
+    instrument = np.asarray(instrument)
+    note = np.asarray(note).astype(np.int32)
+    state = np.asarray(state).astype(np.int32)
     write_csv(file, META_FILE, list(zip(time, instrument, note, state)))
 
 
@@ -343,7 +344,8 @@ def train():
     """
     Train the model
     """
-    data, ins = _input_tf(sequence=SEQUENCE_LENGTH)
+    data = _input_tf(sequence=SEQUENCE_LENGTH)
+    ins = _input_max_ins()
     optimiser = tf.keras.optimizers.Adam(LEARNING_RATE, 0.9, 0.98, 1e-9)
     vec_size = 3 + ins
     transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
@@ -391,6 +393,12 @@ def train():
         print("Saving checkpoint")
         manager.save()
 
+def _output_to_int(pred):
+    return (
+        pred[:, :, 0],
+        tf.argmax(pred[:, :, 1:-3], -1, tf.int32),
+        tf.round(pred[:, :, -2]),
+        tf.cast(pred[:, :, -1] >= 0, tf.float32))
 
 @tf.function()
 def _infer(time, instrument, note, state, transformer, index, max_ins=129):
@@ -401,17 +409,14 @@ def _infer(time, instrument, note, state, transformer, index, max_ins=129):
         tf.expand_dims(tf.cast(note, tf.float32), -1),
         tf.expand_dims(tf.cast(state, tf.float32), -1)), -1), 0)
     predictions, _ = transformer(data[:, :-1, :], data[:, :-1, :], True, mask, mask, mask)
-    return (
-        predictions[:, index, 0],
-        tf.argmax(predictions[:, index, 1:-3], -1, tf.int32),
-        tf.round(predictions[:, index, -2]),
-        tf.cast(predictions[:, index, -1] > 0, tf.float32))
+    return _output_to_int(predictions[:, index:(index + 1), :])
 
 def generate():
     """
     Generate midi with the model
     """
-    (time, instrument, note, state), ins = _input_np(sequence=SEQUENCE_LENGTH)
+    time, instrument, note, state = _input_np(sequence=SEQUENCE_LENGTH)
+    ins = _input_max_ins()
     vec_size = 3 + ins
     transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
     checkpoint = tf.train.Checkpoint(transformer=transformer)
