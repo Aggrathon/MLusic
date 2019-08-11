@@ -58,6 +58,44 @@ def read_csv(filename):
     output.sort()
     return output
 
+def write_csv(filename, instument_csv, notes):
+    instruments = dict()
+    with open(instument_csv) as file:
+        for line in file.readlines():
+            split = line.split(", ")
+            key = int(split[0])
+            track = key // 15 + 2
+            channel = key % 15
+            if channel == 10:
+                channel = 15
+            ins = int(split[1])
+            if ins == PERCUSSION_INSTRUMENT:
+                channel = 10
+            instruments[int(split[0])] = (track, channel, ins)
+    tracks = len(instruments)//15+2
+    with open(filename, "w", encoding="utf8") as file:
+        file.write("0, 0, Header, 1, %d, 192\n"%tracks)
+        file.write("1, 0, Start_track\n")
+        file.write("1, 0, Time_signature, 4, 2, 24, 8\n")
+        file.write("1, 0, Tempo, 500000\n")
+        end = notes[-1][0] * 192 // 500_000 + 100
+        file.write("1, %d, End_track\n"%end)
+        for i in range(2, tracks):
+            file.write("%d, 0, Start_track\n"%i)
+            for j, k, l in instruments.values():
+                if j == i:
+                    file.write("%d, 0, Program_c, %d, %d\n"%(j, k, l))
+            for note in notes:
+                track, chan, ins = instruments[note[1]]
+                if track != i:
+                    continue
+                if note[-1] == 1:
+                    file.write("%d, %d, Note_on_c, %d, %d, 110\n"%(track, note[0]*192//500_000, chan, note[2]))
+                else:
+                    file.write("%d, %d, Note_off_c, %d, 0, 0\n"%(track, note[0]*192//500_000, chan))
+            file.write("%d, %d, End_track\n"%(i, end))
+        file.write("0, 0, End_of_file\n")
+
 
 def read_folder(folder: Path, time_precision: int = 10):
     """

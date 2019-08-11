@@ -10,6 +10,8 @@ from uuid import uuid4
 import tensorflow as tf
 import numpy as np
 from convert_input import DATA_FILE, META_FILE
+from convert_output import OUTPUT_FOLDER
+from convert import write_csv
 
 
 SEQUENCE_LENGTH = 257
@@ -18,7 +20,7 @@ LEARNING_RATE = 1e-6
 CHECKPOINT_PATH = "./network/transformer_midi"
 
 
-def _input(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
+def _input_tf(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
     """
     Read the input dataset
 
@@ -55,6 +57,47 @@ def _input(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LEN
     with open(META_FILE) as file:
         num_instruments = len(file.readlines())
     return data.prefetch(tf.data.experimental.AUTOTUNE), num_instruments
+
+
+def _input_np(file=DATA_FILE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
+    """
+        Read the input dataset to numpy arrays
+    """
+    with open(file) as f:
+        lines = f.readlines()
+        start = np.random.randint(len(lines) - sequence)
+        lines = lines[start:(start + sequence)]
+        time = []
+        inst = []
+        note = []
+        stat = []
+        for l in lines:
+            s = l.split(", ")
+            time.append(int(s[0]))
+            inst.append(int(s[1]))
+            note.append(float(s[2]))
+            stat.append(float(s[3]))
+        time = np.asarray(time)
+        if relative:
+            time = np.concatenate(([0], ((time[1:] - time[:-1]).astype(np.float64)/100_000).astype(np.float32)))
+        else:
+            time = ((time - np.min(time)).astype(np.float64)/100_000).astype(np.float32)
+    num_instruments = 129
+    with open(META_FILE) as file:
+        num_instruments = len(file.readlines())
+    return (time, np.asarray(inst), np.asarray(note), np.asarray(stat)), num_instruments
+
+def _output(time, instrument, note, state, file=OUTPUT_FOLDER / (uuid4().hex + ".csv"), relative: bool = True):
+    print("Saving to", file)
+    if relative:
+        time = (time.astype(np.float64)*1_000_000).astype(np.int32)
+        for i in range(1, len(time)):
+            time[i] += time[i-1]
+    else:
+        time = (time.astype(np.float64)*1_000_000).astype(np.int32)
+    state = state.astype(np.int32)
+    note = note.astype(np.int32)
+    write_csv(file, META_FILE, list(zip(time, instrument, note, state)))
 
 
 def _mask(start: int, total: int = SEQUENCE_LENGTH):
@@ -300,7 +343,7 @@ def train():
     """
     Train the model
     """
-    data, ins = _input(sequence=SEQUENCE_LENGTH)
+    data, ins = _input_tf(sequence=SEQUENCE_LENGTH)
     optimiser = tf.keras.optimizers.Adam(LEARNING_RATE, 0.9, 0.98, 1e-9)
     vec_size = 3 + ins
     transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
@@ -349,43 +392,51 @@ def train():
         manager.save()
 
 
-def generate(songs=1):
+@tf.function()
+def _infer(time, instrument, note, state, transformer, index, max_ins=129):
+    mask = 1 - _mask(1, tf.shape(instrument)[-1])
+    data = tf.expand_dims(tf.concat((
+        tf.expand_dims(tf.cast(time, tf.float32), -1),
+        tf.one_hot(instrument, max_ins, dtype=tf.float32),
+        tf.expand_dims(tf.cast(note, tf.float32), -1),
+        tf.expand_dims(tf.cast(state, tf.float32), -1)), -1), 0)
+    predictions, _ = transformer(data[:, :-1, :], data[:, :-1, :], True, mask, mask, mask)
+    return (
+        predictions[:, index, 0],
+        tf.argmax(predictions[:, index, 1:-3], -1, tf.int32),
+        tf.round(predictions[:, index, -2]),
+        tf.cast(predictions[:, index, -1] > 0, tf.float32))
+
+def generate():
     """
     Generate midi with the model
     """
-    pass
-    # TODO: Update this to use "pseudo" midi:s
-    # s = Song().read_data(DATA_FILE)
-    # def _gen():
-    #     for _ in range(songs):
-    #         start = np.random.randint(0, s.times.shape[0]-50)
-    #         end = start + 40
-    #         times = s.times[start:end, :]
-    #         instruments = s.notes[start:end, 0]
-    #         notes = s.notes[start:end, 1]
-    #         yield times, instruments, notes
-    # def _inp():
-    #     data = tf.data.Dataset.from_generator(
-    #         _gen, (tf.float32, tf.int32, tf.int32), ((40, 3), (40,), (40,)))
-    #     tim, ins, ton = data.batch(1).make_one_shot_iterator().get_next()
-    #     return {"times": tim, "instrument": ins, "tone": ton}, {}
-    # est = tf.estimator.Estimator(_model, "network/predictor")
-    # for out in est.predict(_inp, yield_single_examples=False):
-    #     times = out["times"]
-    #     instruments = out["instrument"]
-    #     tones = out["tone"]
-    #     times.shape = times.shape[1:]
-    #     tones.shape = tones.shape[1]
-    #     instruments.shape = instruments.shape[1]
-    #     s.set_data(times, np.stack((instruments, tones), 1))
-    #     save_and_convert_song(s, "output/song_"+str(uuid4())+".csv", False)
-
+    (time, instrument, note, state), ins = _input_np(sequence=SEQUENCE_LENGTH)
+    vec_size = 3 + ins
+    transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
+    checkpoint = tf.train.Checkpoint(transformer=transformer)
+    manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_PATH, max_to_keep=5)
+    if manager.latest_checkpoint:
+        print('Loading latest checkpoint')
+        checkpoint.restore(manager.latest_checkpoint).expect_partial()
+    else:
+        print("No checkpoint to load")
+        return
+    for j in range(20, SEQUENCE_LENGTH-1):
+        t, i, n, s = _infer(time, instrument, note, state, transformer, 20, ins)
+        time[j+1] = t
+        instrument[j+1] = i
+        note[j+1] = n
+        state[j+1] = s
+        print(".", end="")
+    print("")
+    _output(time, instrument, note, state)
 
 def _handle_start():
     if len(sys.argv) == 2 and sys.argv[1] == "train":
         train()
     elif len(sys.argv) == 2 and sys.argv[1] == "generate":
-        generate(5)
+        generate()
     else:
         print("You must specify what you want to do (train / generate)")
 

@@ -51,34 +51,14 @@ def convert_outputs(reconvert=False):
     midis = list(filter_folder_files(OUTPUT_FOLDER, "mid")) + list(filter_folder_files(OUTPUT_FOLDER, "midi"))
     if csvs:
         for csv in csvs:
-            midi = csv.replace(".csv", ".midi")
-            if midi in midis and not reconvert:
+            midi = str(csv).replace(".csv", ".midi")
+            if not reconvert and midi in midis:
                 continue
             print("Converting", csv, "to midi")
-            subprocess.run([exe, str(csv), str(midi)], shell=False)
+            subprocess.run([str(exe), str(csv), str(midi)], shell=False)
         print("All songs converted")
     else:
         print("No csvs found")
-
-def save_and_convert_song(song, filename: str, play_on_finished: bool = True):
-    """
-    Convert a Song to midi
-
-    Arguments:
-        song {Song} -- The song to convert
-        filename {str} -- The filename for the saved midi csv (also used for the actual midi file)
-
-    Keyword Arguments:
-        play_on_finished {bool} -- Play the resulting midi file with the default program (default: {True}, only on Windows)
-    """
-    #TODO: Update this to use "pseudo" midi:s
-    song.save_midi(filename)
-    exe = check_output_converter()
-    output = filename[:-4]+".midi"
-    if exe is not None:
-        subprocess.run([exe, "-v", filename, output], shell=False)
-        if play_on_finished:
-            os.startfile(output.replace('\\', '\\\\'))
 
 if __name__ == "__main__":
     convert_outputs()
