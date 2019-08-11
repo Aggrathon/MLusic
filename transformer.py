@@ -12,6 +12,7 @@ import numpy as np
 from convert_input import DATA_FILE, META_FILE
 from convert_output import OUTPUT_FOLDER
 from convert import write_csv
+from utils import input_max_ins
 
 
 SEQUENCE_LENGTH = 257
@@ -31,7 +32,6 @@ def _input_tf(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_
 
     Returns:
         PrefetchDataset -- (time, instrument, tone, state)
-        int -- num_instruments
     """
     data = tf.data.experimental.make_csv_dataset(
         file_pattern=str(file),
@@ -54,12 +54,6 @@ def _input_tf(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_
             tf.cast(row["state"], tf.float32)))
     data = data.shuffle(batch*80).batch(batch)
     return data.prefetch(tf.data.experimental.AUTOTUNE)
-
-def _input_max_ins():
-    num_instruments = 129
-    with open(META_FILE) as file:
-        num_instruments = len(file.readlines())
-    return num_instruments
 
 def _input_np(file=DATA_FILE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
     """
@@ -300,7 +294,7 @@ class Decoder(tf.keras.layers.Layer):
 
 
 class Transformer(tf.keras.Model):
-    def __init__(self, seq_len, num_layers, d_model, num_heads, dff, output_size, rate=0.1):
+    def __init__(self, seq_len=SEQUENCE_LENGTH, num_layers=4, d_model=128, num_heads=8, dff=512, output_size=30, rate=0.1):
         super(Transformer, self).__init__()
         self.embedding = tf.keras.layers.Dense(d_model)
         self.encoder = Encoder(seq_len, num_layers, d_model, num_heads, dff, rate)
@@ -345,7 +339,7 @@ def train():
     Train the model
     """
     data = _input_tf(sequence=SEQUENCE_LENGTH)
-    ins = _input_max_ins()
+    ins = input_max_ins()
     optimiser = tf.keras.optimizers.Adam(LEARNING_RATE, 0.9, 0.98, 1e-9)
     vec_size = 3 + ins
     transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
@@ -395,7 +389,7 @@ def train():
 
 def _output_to_int(pred):
     return (
-        pred[:, :, 0],
+        tf.nn.relu(pred[:, :, 0]),
         tf.argmax(pred[:, :, 1:-3], -1, tf.int32),
         tf.round(pred[:, :, -2]),
         tf.cast(pred[:, :, -1] >= 0, tf.float32))
@@ -416,7 +410,7 @@ def generate():
     Generate midi with the model
     """
     time, instrument, note, state = _input_np(sequence=SEQUENCE_LENGTH)
-    ins = _input_max_ins()
+    ins = input_max_ins()
     vec_size = 3 + ins
     transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
     checkpoint = tf.train.Checkpoint(transformer=transformer)

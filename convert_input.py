@@ -75,7 +75,7 @@ def process_inputs(recombine=False):
                 file.write("%d, %d, %d, %d\n"%note)
         with open(META_FILE, "w", encoding="utf8") as file:
             for ins in instruments:
-                file.write("%d, %d\n"%ins)
+                file.write("%d, %d, %d, %d\n"%ins)
 
 if __name__ == "__main__":
     convert_inputs()

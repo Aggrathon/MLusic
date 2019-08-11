@@ -116,11 +116,15 @@ def read_folder(folder: Path, time_precision: int = 10):
     time = 0
     instruments = [-1] * (PERCUSSION_INSTRUMENT + 1)
     inst_ind = 0
+    maxnote = 0
+    minnote = 128
     for file in filter_folder_files(folder, ".csv"):
         try:
             out = read_csv(file)
             if out:
                 for note in out:
+                    maxnote = max(maxnote, note[2])
+                    minnote = min(minnote, note[2])
                     if instruments[note[1]] == -1:
                         instruments[note[1]] = inst_ind
                         inst_ind += 1
@@ -128,7 +132,7 @@ def read_folder(folder: Path, time_precision: int = 10):
                 time = output[-1][0]
         except FileFormatException:
             pass
-    instruments = sorted([(ins, i) for i, ins in enumerate(instruments) if ins != -1])
+    instruments = sorted([(ins, i, maxnote, minnote) for i, ins in enumerate(instruments) if ins != -1])
     return output, instruments
 
 

@@ -2,7 +2,8 @@
 import sys
 from time import time as timer
 import tensorflow as tf
-from transformer import Transformer, Encoder, _input_tf, _output_to_int, _input_max_ins, _output
+from transformer import Transformer, Encoder, _input_tf, _output_to_int, _output
+from utils import input_max_ins
 
 SEQUENCE_LENGTH = 256
 BATCH_SIZE = 32
@@ -46,7 +47,7 @@ class Discriminator(tf.keras.Model):
         return tf.reduce_mean(out, -1)
 
 def _clean_gen_out(output):
-    time = tf.nn.relu(output[:, :, 0])
+    time = tf.nn.leaky_relu(output[:, :, 0], 0.1)
     instrument = tf.nn.softmax(tf.nn.leaky_relu(output[:, :, 1:-2]))
     note = output[:, :, -2]
     state = tf.nn.sigmoid(output[:, :, -1])
@@ -58,7 +59,7 @@ def _dirty_real_input(time, instrument, note, state, num_ins=20):
     instrument = instrument + tf.random.normal(shape=tf.shape(instrument), stddev=0.1)
     instrument = tf.nn.softmax(instrument)
     note = note + tf.random.normal(shape=tf.shape(note), stddev=0.1)
-    state = tf.nn.softmax((state * 3.0 - 1.5) + tf.random.normal(shape=tf.shape(state), stddev=0.2))
+    state = tf.nn.sigmoid((state * 3.0 - 1.5) + tf.random.normal(shape=tf.shape(state), stddev=0.2))
     return time, instrument, note, state
 
 def _concat_inputs(time, instrument, note, state):
@@ -105,7 +106,7 @@ def train():
     """
     print("Setting up training")
     data = _input_tf(sequence=SEQUENCE_LENGTH, batch=BATCH_SIZE)
-    ins = _input_max_ins()
+    ins = input_max_ins()
     vec_size = 3 + ins
     gen = Generator(output_size=vec_size)
     dis = Discriminator()
@@ -162,7 +163,7 @@ def generate():
     """
     Generate midi with the model
     """
-    ins = 3 + _input_max_ins()
+    ins = 3 + input_max_ins()
     gen = Generator(output_size=ins, batch=1)
     checkpoint = tf.train.Checkpoint(gen=gen)
     manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_PATH, max_to_keep=5)
