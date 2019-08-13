@@ -1,139 +1,68 @@
 """
-    Transformer for predicting the next "pseudo" midi events
+    Transformer architechture
 
     Transformer architechture from https://www.tensorflow.org/beta/tutorials/text/transformer
     Relative time embeddings from https://arxiv.org/abs/1809.04281
 """
-import sys
-from time import time as timer
-from uuid import uuid4
 import tensorflow as tf
 import numpy as np
-from convert_input import DATA_FILE, META_FILE
-from convert_output import OUTPUT_FOLDER
-from convert import write_csv
-from utils import input_max_ins
 
-
-SEQUENCE_LENGTH = 257
-BATCH_SIZE = 64
-LEARNING_RATE = 1e-6
-CHECKPOINT_PATH = "./network/transformer_midi"
-
-
-def _input_tf(file=DATA_FILE, batch: int = BATCH_SIZE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
+def positional_encoding(seq_len, d_model):
     """
-    Read the input dataset
-
-    Keyword Arguments:
-        input {} -- input file name (default: {DATA_FILE})
-        batch {int} -- batch size (default: {BATCH_SIZE})
-        sequence {int} -- sequence length (default: {SEQUENCE_LENGTH})
-
-    Returns:
-        PrefetchDataset -- (time, instrument, tone, state)
+        Get a positional encoding matrix
     """
-    data = tf.data.experimental.make_csv_dataset(
-        file_pattern=str(file),
-        batch_size=sequence,
-        column_names=["time", "instrument", "note", "state"],
-        column_defaults=[0, 0, 0, 0],
-        shuffle=False,
-        header=False)
-    if relative:
-        data = data.map(lambda row: (
-            tf.concat(([0.0], tf.cast(tf.cast(row["time"][1:] - row["time"][:-1], tf.float64)/100_000, tf.float32)), -1),
-            row["instrument"],
-            tf.cast(row["note"], tf.float32),
-            tf.cast(row["state"], tf.float32)))
-    else:
-        data = data.map(lambda row: (
-            tf.cast(tf.cast(row["time"] - tf.reduce_min(row["time"]), tf.float64)/100_000, tf.float32),
-            row["instrument"],
-            tf.cast(row["note"], tf.float32),
-            tf.cast(row["state"], tf.float32)))
-    data = data.shuffle(batch*80).batch(batch)
-    return data.prefetch(tf.data.experimental.AUTOTUNE)
+    positions = tf.range(seq_len, dtype=tf.float32)[:, tf.newaxis]
+    models = tf.range(d_model, dtype=tf.float32)[tf.newaxis, :]
+    angle_rates = 1 / tf.pow(10000.0, (2.0 * tf.floor(models / 2.0)) / tf.cast(d_model, tf.float32))
+    angle_rads = positions * angle_rates
+    rads_even = tf.sin(angle_rads[:, 0::2])
+    rads_odd = tf.cos(angle_rads[:, 1::2])
+    return tf.concat((rads_even, rads_odd), -1)[tf.newaxis, :, :]
 
-def _input_np(file=DATA_FILE, sequence: int = SEQUENCE_LENGTH, relative: bool = True):
+def padding_mask(seq):
     """
-        Read the input dataset to numpy arrays
+        Masks out padding elements
+        (Not needed here since the length is fixed)
     """
-    with open(file) as f:
-        lines = f.readlines()
-        start = np.random.randint(len(lines) - sequence)
-        lines = lines[start:(start + sequence)]
-        time = []
-        inst = []
-        note = []
-        stat = []
-        for l in lines:
-            s = l.split(", ")
-            time.append(int(s[0]))
-            inst.append(int(s[1]))
-            note.append(float(s[2]))
-            stat.append(float(s[3]))
-        time = np.asarray(time)
-        if relative:
-            time = np.concatenate(([0], ((time[1:] - time[:-1]).astype(np.float64)/100_000).astype(np.float32)))
-        else:
-            time = ((time - np.min(time)).astype(np.float64)/100_000).astype(np.float32)
-    return (time, np.asarray(inst), np.asarray(note), np.asarray(stat))
+    return tf.cast(tf.math.equal(seq, 0), tf.float32)[:, tf.newaxis, tf.newaxis, :]
 
-def _output(time, instrument, note, state, file=OUTPUT_FOLDER / (uuid4().hex + ".csv"), relative: bool = True):
-    print("Saving to", file)
-    if relative:
-        time = np.asarray(time)
-        time = (time.astype(np.float64)*1_000_000).astype(np.int32)
-        for i in range(1, len(time)):
-            time[i] += time[i-1]
-    else:
-        time = (time.astype(np.float64)*1_000_000).astype(np.int32)
-    instrument = np.asarray(instrument)
-    note = np.asarray(note).astype(np.int32)
-    state = np.asarray(state).astype(np.int32)
-    write_csv(file, META_FILE, list(zip(time, instrument, note, state)))
-
-
-def _mask(start: int, total: int = SEQUENCE_LENGTH):
-    """Create triangular mask
-
-    Arguments:
-        start {int} -- trim too few unmasked
-
-    Keyword Arguments:
-        total {int} -- The maximum sequence length (default: {SEQUENCE_LENGTH})
-
-    Returns:
-        Tensor(total-start, total) -- mask
+def look_ahead_mask(size):
     """
-    return tf.linalg.band_part(tf.ones((total-1, total-1)), -1, 0)[(start-1):, :]
-
-
-def attention(q, k, v, mask=None):
-    """Attention (scaled dot)
-
-    Arguments:
-        q {Tensor(..., seq_len_q, depth)} -- query
-        k {Tensor(..., seq_len_k, depth)} -- key
-        v {Tensor(..., seq_len_k, depth_v)} -- value
-
-    Keyword Arguments:
-        mask {Tensor(..., seq_len_q, seq_len_k)} -- mask (default: None)
-
-    Returns:
-        Tensor(..., seq_len_q, depth_v) -- Output
-        Tensor(..., seq_len_q, seq_len_k) -- Attention Weights
+        Masks future tokens
     """
-    matmul_qk = tf.matmul(q, k, transpose_b=True)
-    sq_dk = tf.math.sqrt(tf.cast(tf.shape(k)[-1], tf.float32))
-    scaled_attention_logits = matmul_qk / sq_dk
-    if mask is not None:
-        scaled_attention_logits += (mask * -1e9)
-    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
-    output = tf.matmul(attention_weights, v)
-    return output, attention_weights
+    return 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
 
+
+class Attention(tf.keras.layers.Layer):
+    """
+        Attention (scaled dot)
+    """
+    def __init__(self):
+        super(Attention, self).__init__()
+
+    def call(self, q, k, v, mask=None):
+        """Attention (scaled dot)
+
+        Arguments:
+            q {Tensor(..., seq_len_q, depth)} -- query
+            k {Tensor(..., seq_len_k, depth)} -- key
+            v {Tensor(..., seq_len_k, depth_v)} -- value
+
+        Keyword Arguments:
+            mask {Tensor(..., seq_len_q, seq_len_k)} -- mask (default: None)
+
+        Returns:
+            Tensor(..., seq_len_q, depth_v) -- Output
+            Tensor(..., seq_len_q, seq_len_k) -- Attention Weights
+        """
+        matmul_qk = tf.matmul(q, k, transpose_b=True)
+        sq_dk = tf.math.sqrt(tf.cast(tf.shape(k)[-1], tf.float32))
+        scaled_attention_logits = matmul_qk / sq_dk
+        if mask is not None:
+            scaled_attention_logits += (mask * -1e9)
+        attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
+        output = tf.matmul(attention_weights, v)
+        return output, attention_weights
 
 class AttentionRelative(tf.keras.layers.Layer):
     """
@@ -141,12 +70,12 @@ class AttentionRelative(tf.keras.layers.Layer):
     """
     def __init__(self):
         super(AttentionRelative, self).__init__()
-    
+
     def build(self, input_shape):
         #This assumes that t.shape(q) == tf.shape(k)
         init_val = tf.keras.initializers.RandomNormal(stddev=tf.cast(input_shape[-1], tf.float32)**-0.5)
-        self.key_relative_embeddings = self.add_weight("key_relative_embeddings", input_shape[-2:], tf.float32, init_val, trainable = True)
-        self.value_relative_embeddings = self.add_weight("value_relative_embeddings", input_shape[-2:], tf.float32, init_val, trainable = True)
+        self.key_relative_embeddings = self.add_weight("key_relative_embeddings", input_shape[-2:], tf.float32, init_val, trainable=True)
+        self.value_relative_embeddings = self.add_weight("value_relative_embeddings", input_shape[-2:], tf.float32, init_val, trainable=True)
 
     def call(self, q, k, v, mask=None):
         matmul_qk = tf.matmul(q, k, transpose_b=True)
@@ -168,7 +97,7 @@ class AttentionRelative(tf.keras.layers.Layer):
 
 
 class MultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, seq_len, d_model, num_heads):
+    def __init__(self, d_model, num_heads, relative=True):
         super(MultiHeadAttention, self).__init__()
         assert d_model % num_heads == 0
         self.num_heads = num_heads
@@ -178,7 +107,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
         self.dense = tf.keras.layers.Dense(d_model)
-        self.attention = AttentionRelative()
+        self.attention = AttentionRelative() if relative else Attention()
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
@@ -202,7 +131,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return output, attention_weights # (batch_size, seq_len_q, d_model), (batch_size, num_heads, seq_len_q, seq_len_k)
 
 
-def _feed_forward(d_model, dff):
+def feed_forward(d_model, dff):
     """A short feed forward network
 
     Arguments:
@@ -219,10 +148,10 @@ def _feed_forward(d_model, dff):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, seq_len, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, relative=True):
         super(EncoderLayer, self).__init__()
-        self.mha = MultiHeadAttention(seq_len, d_model, num_heads)
-        self.ffn = _feed_forward(d_model, dff)
+        self.mha = MultiHeadAttention(d_model, num_heads, relative)
+        self.ffn = feed_forward(d_model, dff)
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.dropout1 = tf.keras.layers.Dropout(rate)
@@ -239,24 +168,38 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, seq_len, num_layers, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, num_layers, d_model, num_heads, dff, input_size, rate=0.1, relative=True):
         super(Encoder, self).__init__()
         self.d_model = d_model
         self.num_layers = num_layers
-        self.enc_layers = [EncoderLayer(seq_len, d_model, num_heads, dff, rate) for _ in range(num_layers)]
+        self.embedding = tf.keras.layers.Dense(d_model, tf.nn.leaky_relu)
+        self.relative = relative
+        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(rate)    
+
+        def build(self, input_shape):
+            print(input_shape)
+            if self.relative:
+                self.pos_enc = positional_encoding(input_shape[1], self.d_model)
 
     def call(self, x, training, mask):
+        seq_len = tf.shape(x)[1]
+        x = self.embedding(x)
+        if self.relative:
+            x = x * tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+            x = x + self.pos_enc
+        x = self.dropout(x, training=training)
         for i in range(self.num_layers):
             x = self.enc_layers[i](x, training, mask)
         return x  # (batch_size, input_seq_len, d_model)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, seq_len, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, relative=True):
         super(DecoderLayer, self).__init__()
-        self.mha1 = MultiHeadAttention(seq_len, d_model, num_heads)
-        self.mha2 = MultiHeadAttention(seq_len, d_model, num_heads)
-        self.ffn = _feed_forward(d_model, dff)
+        self.mha1 = MultiHeadAttention(d_model, num_heads, relative)
+        self.mha2 = MultiHeadAttention(d_model, num_heads, relative)
+        self.ffn = feed_forward(d_model, dff)
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -278,14 +221,27 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class Decoder(tf.keras.layers.Layer):
-    def __init__(self, seq_len, num_layers, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, num_layers, d_model, num_heads, dff, output_size, rate=0.1, relative=True):
         super(Decoder, self).__init__()
         self.d_model = d_model
         self.num_layers = num_layers
-        self.dec_layers = [DecoderLayer(seq_len, d_model, num_heads, dff, rate) for _ in range(num_layers)]
+        self.embedding = tf.keras.layers.Dense(d_model, tf.nn.leaky_relu)
+        self.relative = relative
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(rate)
+
+    def build(self, input_shape):
+        if self.relative:
+            self.pos_enc = positional_encoding(input_shape[1], self.d_model)
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
+        seq_len = tf.shape(x)[1]    
         attention_weights = {}
+        x = self.embedding(x)
+        if self.relative:
+            x = x * tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+            x = x + self.pos_enc
+        x = self.dropout(x, training=training)
         for i in range(self.num_layers):
             x, block1, block2 = self.dec_layers[i](x, enc_output, training, look_ahead_mask, padding_mask)
             attention_weights['decoder_layer{}_block1'.format(i+1)] = block1
@@ -294,151 +250,14 @@ class Decoder(tf.keras.layers.Layer):
 
 
 class Transformer(tf.keras.Model):
-    def __init__(self, seq_len=SEQUENCE_LENGTH, num_layers=4, d_model=128, num_heads=8, dff=512, output_size=30, rate=0.1):
+    def __init__(self, num_layers=4, d_model=128, num_heads=8, dff=512, input_size=30, output_size=30, rate=0.1, relative=True):
         super(Transformer, self).__init__()
-        self.embedding = tf.keras.layers.Dense(d_model)
-        self.encoder = Encoder(seq_len, num_layers, d_model, num_heads, dff, rate)
-        self.decoder = Decoder(seq_len, num_layers, d_model, num_heads, dff, rate)
+        self.encoder = Encoder(num_layers, d_model, num_heads, dff, input_size, rate, relative)
+        self.decoder = Decoder(num_layers, d_model, num_heads, dff, output_size, rate, relative)
         self.final_layer = tf.keras.layers.Dense(output_size)
 
     def call(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask):
-        inp = self.embedding(inp)
-        tar = self.embedding(tar)
         enc_output = self.encoder(inp, training, enc_padding_mask)
         dec_output, attention_weights = self.decoder(tar, enc_output, training, look_ahead_mask, dec_padding_mask)
         final_output = self.final_layer(dec_output)
         return final_output, attention_weights # (batch_size, tar_seq_len, output_size), ?
-
-
-def _loss(vec, time, instrument, note, state):
-    loss_state = tf.reduce_mean(tf.losses.binary_crossentropy(state, vec[:, :, -1], from_logits=True, label_smoothing=0.1))
-    loss_note = tf.reduce_mean(tf.losses.MSE(note, vec[:, :, -2])) / 10
-    loss_time = tf.reduce_mean(tf.losses.logcosh(time, vec[:, :, 0])) * 10
-    loss_inst = tf.reduce_mean(tf.losses.sparse_categorical_crossentropy(instrument, vec[:, :, 1:-2], from_logits=True))
-    return loss_time + loss_inst + loss_note + loss_state, loss_time, loss_inst, loss_note, loss_state
-
-
-@tf.function()
-def _train_step(time, instrument, note, state, transformer, optimiser, max_ins=129):
-    mask = 1 - _mask(1, tf.shape(instrument)[-1])
-    data = tf.concat((
-        tf.expand_dims(time, -1),
-        tf.one_hot(instrument, max_ins, dtype=tf.float32),
-        tf.expand_dims(note, -1),
-        tf.expand_dims(state, -1)), -1)
-    with tf.GradientTape() as tape:
-        predictions, _ = transformer(data[:, :-1, :], data[:, :-1, :], True, mask, mask, mask)
-        loss = _loss(predictions, time[:, 1:], instrument[:, 1:], note[:, 1:], state[:, 1:])
-    gradients = tape.gradient(loss[0], transformer.trainable_variables)
-    optimiser.apply_gradients(zip(gradients, transformer.trainable_variables))
-    return loss
-
-
-def train():
-    """
-    Train the model
-    """
-    data = _input_tf(sequence=SEQUENCE_LENGTH)
-    ins = input_max_ins()
-    optimiser = tf.keras.optimizers.Adam(LEARNING_RATE, 0.9, 0.98, 1e-9)
-    vec_size = 3 + ins
-    transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
-    checkpoint = tf.train.Checkpoint(transformer=transformer, optimizer=optimiser)
-    manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_PATH, max_to_keep=5)
-    if manager.latest_checkpoint:
-        print('Loading latest checkpoint')
-        checkpoint.restore(manager.latest_checkpoint)
-    loss_total = tf.keras.metrics.Mean(name='loss_total')
-    loss_state = tf.keras.metrics.Mean(name='loss_state')
-    loss_note = tf.keras.metrics.Mean(name='loss_note')
-    loss_time = tf.keras.metrics.Mean(name='loss_time')
-    loss_inst = tf.keras.metrics.Mean(name='loss_inst')
-    data = enumerate(data)
-    next(data)
-    try:
-        start = timer()
-        print("Starting training")
-        for (i, (time, instrument, note, state)) in data:
-            loss = _train_step(time, instrument, note, state, transformer, optimiser, ins)
-            loss_time(loss[1])
-            loss_inst(loss[2])
-            loss_note(loss[3])
-            loss_state(loss[4])
-            loss_total(loss[0])
-            if i % 50 == 0:
-                print("Batch: {:6d}      Loss: {:5.3f} ({:4.2f} {:4.2f} {:4.2f} {:4.2f})      Time: {:6.2f}".format(
-                    i,
-                    loss_total.result(),
-                    loss_time.result(),
-                    loss_inst.result(),
-                    loss_note.result(),
-                    loss_state.result(),
-                    timer() - start))
-                if i % 500 == 0:
-                    print("Saving checkpoint")
-                    manager.save()
-                    loss_total.reset_states()
-                    loss_state.reset_states()
-                    loss_note.reset_states()
-                    loss_time.reset_states()
-                    loss_inst.reset_states()
-                start = timer()
-    except KeyboardInterrupt:
-        print("Saving checkpoint")
-        manager.save()
-
-def _output_to_int(pred):
-    return (
-        tf.nn.relu(pred[:, :, 0]),
-        tf.argmax(pred[:, :, 1:-3], -1, tf.int32),
-        tf.round(pred[:, :, -2]),
-        tf.cast(pred[:, :, -1] >= 0, tf.float32))
-
-@tf.function()
-def _infer(time, instrument, note, state, transformer, index, max_ins=129):
-    mask = 1 - _mask(1, tf.shape(instrument)[-1])
-    data = tf.expand_dims(tf.concat((
-        tf.expand_dims(tf.cast(time, tf.float32), -1),
-        tf.one_hot(instrument, max_ins, dtype=tf.float32),
-        tf.expand_dims(tf.cast(note, tf.float32), -1),
-        tf.expand_dims(tf.cast(state, tf.float32), -1)), -1), 0)
-    predictions, _ = transformer(data[:, :-1, :], data[:, :-1, :], True, mask, mask, mask)
-    return _output_to_int(predictions[:, index:(index + 1), :])
-
-def generate():
-    """
-    Generate midi with the model
-    """
-    time, instrument, note, state = _input_np(sequence=SEQUENCE_LENGTH)
-    ins = input_max_ins()
-    vec_size = 3 + ins
-    transformer = Transformer(SEQUENCE_LENGTH-1, 4, 128, 8, 512, vec_size, 0.1)
-    checkpoint = tf.train.Checkpoint(transformer=transformer)
-    manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_PATH, max_to_keep=5)
-    if manager.latest_checkpoint:
-        print('Loading latest checkpoint')
-        checkpoint.restore(manager.latest_checkpoint).expect_partial()
-    else:
-        print("No checkpoint to load")
-        return
-    for j in range(20, SEQUENCE_LENGTH-1):
-        t, i, n, s = _infer(time, instrument, note, state, transformer, 20, ins)
-        time[j+1] = t
-        instrument[j+1] = i
-        note[j+1] = n
-        state[j+1] = s
-        print(".", end="")
-    print("")
-    _output(time, instrument, note, state)
-
-def _handle_start():
-    if len(sys.argv) == 2 and sys.argv[1] == "train":
-        train()
-    elif len(sys.argv) == 2 and sys.argv[1] == "generate":
-        generate()
-    else:
-        print("You must specify what you want to do (train / generate)")
-
-
-if __name__ == "__main__":
-    _handle_start()

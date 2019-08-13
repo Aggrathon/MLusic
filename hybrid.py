@@ -1,9 +1,12 @@
-
+"""
+    Hybrid between traditional transformer and a GAN
+    (Currently Broken)
+"""
 import sys
 from time import time as timer
 import numpy as np
 import tensorflow as tf
-from transformer import _mask, Transformer, Encoder, SEQUENCE_LENGTH
+from transformer importlook_ahead_mask, Transformer, Encoder, SEQUENCE_LENGTH
 from gan import BATCH_SIZE
 from utils import AddNoiseToInput, CleanOutput
 
@@ -26,7 +29,7 @@ class Discriminator(tf.keras.Model):
 def _train_step(data, inp, out, transformer, dis, tra_opt, dis_opt):
     clean = inp.no_noise(*data)
     dirty = inp(*data)
-    mask = 1 - _mask(1, tf.shape(clean)[-2])
+    mask = look_ahead_mask(1, tf.shape(clean)[-2])
     with tf.GradientTape(persistent=True) as tape:
         unclean, _ = transformer(clean[:, :-1, :], clean[:, :-1, :], True, mask, mask, mask)
         fake = out(unclean)
@@ -109,7 +112,7 @@ def train():
 @tf.function()
 def _infer(data, inp, gen, out):
     data = inp(*data)
-    mask = 1 - _mask(1, tf.shape(data)[1])
+    mask = look_ahead_mask(1, tf.shape(data)[1])
     tmp, _ = gen(data[:, :-1, :], data[:, :-1, :], False, mask, mask, mask)
     return out(tmp)
 
@@ -121,8 +124,8 @@ def generate():
     """
     Generate midi with the model
     """
-    inp = AddNoiseToInput(time_multiplier=10, relative=True)
-    out = CleanOutput(time_multiplier=10, relative=True, as_output=True)
+    inp = AddNoiseToInput(time_multiplier=10.0, relative=True)
+    out = CleanOutput(time_multiplier=10.0, relative=True, as_output=True)
     tra = Transformer(SEQUENCE_LENGTH-1, output_size=2 + out.instruments - out.minnote + out.maxnote + 1)
     checkpoint = tf.train.Checkpoint(tra=tra)
     manager = tf.train.CheckpointManager(checkpoint, CHECKPOINT_PATH, max_to_keep=5)
@@ -136,8 +139,8 @@ def generate():
     data = [np.copy(decode(i)) for i in data]
     for i in range(20, SEQUENCE_LENGTH-1):
         tmp = _infer(data, inp, tra, out)
-        for j, t in enumerate(tmp):
-            data[j][:, i+1] = t[:, i]
+        for d, t in zip(data, tmp):
+            d[:, i+1] = t[:, i]
     out.write_to_file(*data)
 
 if __name__ == "__main__":

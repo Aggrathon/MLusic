@@ -1,4 +1,7 @@
-
+"""
+    GAN Transformer
+    (Currently Broken)
+"""
 import sys
 from time import time as timer
 import tensorflow as tf
