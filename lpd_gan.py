@@ -7,7 +7,7 @@ from lpd import read, write, _infer
 
 SEQUENCE_LENGTH = 256
 BATCH_SIZE = 32
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1e-4
 CHECKPOINT_PATH = "./network/transformer_lpd_gan"
 
 @tf.function()
@@ -17,7 +17,7 @@ def train_step(data, generator, discriminator, gen_optimiser, dis_optimiser):
         fake, _ = generator(data[:, :-1, :], data[:, :-1, :], True, None, mask, None)
         #loss_sup = tf.nn.softmax_cross_entropy_with_logits(data[:, 1:, :], fake)
         fake = tf.nn.sigmoid(fake)
-        fake = fake / tf.maximum(0.5, tf.reduce_max(fake, -1, True))
+        # fake = fake / tf.maximum(0.5, tf.reduce_max(fake, -1, True))
         fake, _ = discriminator(data[:, :-1, :], fake, True, None, mask, None)
         real, _ = discriminator(data[:, :-1, :], data[:, 1:, :], True, None, mask, None)
         loss_gen = tf.losses.binary_crossentropy(tf.ones_like(fake), fake, True, 0.1)
@@ -71,6 +71,15 @@ def train():
     except KeyboardInterrupt:
         print("Saving checkpoint")
         manager.save()
+
+
+@tf.function()
+def _infer(data, tra):
+    mask = look_ahead_mask(tf.shape(data)[1])
+    tmp, _ = tra(data, data, False, mask, mask, mask)
+    tmp = tf.nn.sigmoid(tmp)[:, -1, :]
+    # tmp = tmp / tf.maximum(tf.reduce_max(tmp), 0.5)
+    return tmp
 
 
 def generate(length=SEQUENCE_LENGTH*3):
