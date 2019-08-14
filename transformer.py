@@ -172,7 +172,7 @@ class Encoder(tf.keras.layers.Layer):
         super(Encoder, self).__init__()
         self.d_model = d_model
         self.num_layers = num_layers
-        self.embedding = tf.keras.layers.Dense(d_model, tf.nn.leaky_relu)
+        self.embedding = feed_forward(d_model, d_model)
         self.relative = relative
         self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)    
@@ -225,7 +225,7 @@ class Decoder(tf.keras.layers.Layer):
         super(Decoder, self).__init__()
         self.d_model = d_model
         self.num_layers = num_layers
-        self.embedding = tf.keras.layers.Dense(d_model, tf.nn.leaky_relu)
+        self.embedding = feed_forward(d_model, d_model)
         self.relative = relative
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)
