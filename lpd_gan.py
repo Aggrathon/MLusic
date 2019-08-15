@@ -20,7 +20,7 @@ def train_step(data, generator, discriminator, gen_optimiser, dis_optimiser):
         # fake = fake / tf.maximum(0.5, tf.reduce_max(fake, -1, True))
         fake, _ = discriminator(data[:, :-1, :], fake, True, None, mask, None)
         real, _ = discriminator(data[:, :-1, :], data[:, 1:, :], True, None, mask, None)
-        loss_gen = tf.losses.binary_crossentropy(tf.ones_like(fake), fake, True)
+        loss_gen = tf.losses.binary_crossentropy(tf.ones_like(fake), fake, True, 0.1)
         loss_fake = tf.losses.binary_crossentropy(tf.zeros_like(fake), fake, True)
         loss_real = tf.losses.binary_crossentropy(tf.ones_like(real), real, True, 0.1)
         lsgm = tf.reduce_mean(loss_gen)
