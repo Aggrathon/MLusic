@@ -62,7 +62,9 @@ def read(sequence=SEQUENCE_LENGTH+1, batch=BATCH_SIZE):
     data = data.map(lambda x: x / 127)
     return data.prefetch(tf.data.experimental.AUTOTUNE)
 
-def write(track, file=OUTPUT_DIR / (uuid4().hex + ".midi")):
+def write(track, file=None):
+    if file is None:
+        file = OUTPUT_DIR / (uuid4().hex + ".midi")
     track[track < 20] = 0
     track = Track(track)
     track = Multitrack(tracks=[track])
