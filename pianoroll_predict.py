@@ -20,7 +20,7 @@ def train_step(data, transformer, optimiser):
     mask = look_ahead_mask(tf.shape(data)[1]-1)
     with tf.GradientTape() as tape:
         predictions, _ = transformer(data[:, :-1, :], True, mask)
-        predictions = tf.nn.sigmoid(predictions)
+        predictions = tf.nn.leaky_relu(predictions, 0.1)
         loss = tf.keras.losses.mean_squared_error(data[:, 33:, :], predictions[:, 32:, :])
     gradients = tape.gradient(loss, transformer.trainable_variables)
     optimiser.apply_gradients(zip(gradients, transformer.trainable_variables))
@@ -64,7 +64,7 @@ def train():
 def _infer(data, tra):
     mask = look_ahead_mask(tf.shape(data)[1])
     tmp, _ = tra(data, False, mask)
-    tmp = tf.nn.sigmoid(tmp)[:, -1, :]
+    tmp = tf.nn.relu(tmp)[:, -1, :]
     return tmp
 
 def generate(length=SEQUENCE_LENGTH*2):

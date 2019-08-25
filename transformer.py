@@ -5,7 +5,6 @@
     Relative time embeddings from https://arxiv.org/abs/1809.04281
 """
 import tensorflow as tf
-import numpy as np
 
 def positional_encoding(seq_len, d_model):
     """

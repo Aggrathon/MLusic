@@ -8,7 +8,7 @@ from lpd import read, write
 SEQUENCE_LENGTH = 256
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
-CHECKPOINT_PATH = "./network/transformer_lpd_gan"
+CHECKPOINT_PATH = "./network/pianoroll_hybrid"
 
 @tf.function()
 def train_step(data, generator, discriminator, gen_optimiser, dis_optimiser):

@@ -10,7 +10,7 @@ from pianoroll_predict import _infer
 SEQUENCE_LENGTH = 512
 BATCH_SIZE = 48
 LEARNING_RATE = 1e-6
-CHECKPOINT_PATH = "./network/transformer_midi_gan"
+CHECKPOINT_PATH = "./network/pianoroll_gan"
 
 
 class Generator(tf.keras.Model):
