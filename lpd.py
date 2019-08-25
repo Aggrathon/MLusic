@@ -75,9 +75,10 @@ def write(track, file=None):
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "convert":
         convert()
-    elif len(sys.argv) == 2 and sys.argv[1] == "train":
-        train()
-    elif len(sys.argv) == 2 and sys.argv[1] == "generate":
-        generate()
     else:
-        print("You must specify what you want to do (train / generate / convert)")
+        print("")
+        print("")
+        print("You must first download the lpd dataset and unzip it to: ", DATA_DIR)
+        print("The dataset can be downloaded from: https://salu133445.github.io/lakh-pianoroll-dataset/dataset")
+        print("Then you can rerun this script with: python %s convert"%sys.argv[0])
+        print("")
