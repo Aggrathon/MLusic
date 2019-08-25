@@ -47,7 +47,7 @@ def train():
         for i, dat in data:
             loss(train_step(dat, tra, opt))
             if i % 100 == 0:
-                print("Step: {:6d}      Loss: {:6.3f}      Time: {:5.2f}".format(
+                print("Step: {:5d}      Loss: {:6.3f}      Time: {:5.2f}".format(
                     i, loss.result(), timer() - logtime))
                 if chptime < timer():
                     print("Saving checkpoint (%d min)"%int((timer() - starttime)/60))

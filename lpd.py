@@ -73,7 +73,7 @@ def write(track, file=None):
     os.startfile(file)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2 and sys.argv[1] == "convert":
+    if len(sys.argv) == 2 and sys.argv[1] == "convert" and DATA_DIR.exists():
         convert()
     else:
         print("")
