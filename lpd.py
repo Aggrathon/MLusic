@@ -22,7 +22,7 @@ LEARNING_RATE = 1e-4
 CHECKPOINT_PATH = "./network/transformer_lpd"
 
 
-def convert():
+def convert(remove_drum=True):
     """
         Convert all .npz files in DATA_DIR to simpler .npz in CONVERTED_DIR
         It is possible to run multiple instances concurrently
@@ -37,6 +37,10 @@ def convert():
             continue
         out.touch()
         mt = load(str(p))
+        if remove_drum:
+            mt.remove_tracks([i for i, t in enumerate(mt.tracks) if t.is_drum])
+        if not mt.tracks:
+            continue
         st = mt.get_merged_pianoroll("max")
         st = Track(st)
         st.trim_trailing_silence()

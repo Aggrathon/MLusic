@@ -32,7 +32,6 @@ def look_ahead_mask(size):
     """
     return 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
 
-
 class Attention(tf.keras.layers.Layer):
     """
         Attention (scaled dot)
@@ -178,14 +177,13 @@ class Encoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate)    
 
         def build(self, input_shape):
-            print(input_shape)
-            if self.relative:
+            if not self.relative:
                 self.pos_enc = positional_encoding(input_shape[1], self.d_model)
 
     def call(self, x, training, mask):
         seq_len = tf.shape(x)[1]
         x = self.embedding(x)
-        if self.relative:
+        if not self.relative:
             x = x * tf.math.sqrt(tf.cast(self.d_model, tf.float32))
             x = x + self.pos_enc
         x = self.dropout(x, training=training)
@@ -231,14 +229,14 @@ class Decoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate)
 
     def build(self, input_shape):
-        if self.relative:
+        if not self.relative:
             self.pos_enc = positional_encoding(input_shape[1], self.d_model)
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         seq_len = tf.shape(x)[1]    
         attention_weights = {}
         x = self.embedding(x)
-        if self.relative:
+        if not self.relative:
             x = x * tf.math.sqrt(tf.cast(self.d_model, tf.float32))
             x = x + self.pos_enc
         x = self.dropout(x, training=training)
@@ -260,4 +258,53 @@ class Transformer(tf.keras.Model):
         enc_output = self.encoder(inp, training, enc_padding_mask)
         dec_output, attention_weights = self.decoder(tar, enc_output, training, look_ahead_mask, dec_padding_mask)
         final_output = self.final_layer(dec_output)
+        return final_output, attention_weights # (batch_size, tar_seq_len, output_size), ?
+
+
+class DecodingLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, relative=True):
+        super(DecodingLayer, self).__init__()
+        self.mha = MultiHeadAttention(d_model, num_heads, relative)
+        self.ffn = feed_forward(d_model, dff)
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, training, look_ahead_mask):
+        attn, attn_weights_block = self.mha(x, x, x, look_ahead_mask)
+        attn = self.dropout1(attn, training=training)
+        out = self.layernorm1(attn + x)
+        ffn_output = self.ffn(out)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        final = self.layernorm2(ffn_output + out)
+        return final, attn_weights_block
+
+
+class DecodingTransformer(tf.keras.Model):
+    def __init__(self, num_layers=4, d_model=128, num_heads=8, dff=512, output_size=30, rate=0.1, relative=True):
+        super(DecodingTransformer, self).__init__()
+        self.d_model = d_model
+        self.num_layers = num_layers
+        self.embedding = feed_forward(d_model, d_model)
+        self.relative = relative
+        self.dec_layers = [DecodingLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(rate)
+        self.final_layer = tf.keras.layers.Dense(output_size)
+
+    def build(self, input_shape):
+        if not self.relative:
+            self.pos_enc = positional_encoding(input_shape[1], self.d_model)
+
+    def call(self, x, training, la_mask):
+        attention_weights = {}
+        x = self.embedding(x)
+        if not self.relative:
+            x = x * tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+            x = x + self.pos_enc
+        x = self.dropout(x, training=training)
+        for i in range(self.num_layers):
+            x, block = self.dec_layers[i](x, training, la_mask)
+            attention_weights['decoder_layer{}_block'.format(i+1)] = block
+        final_output = self.final_layer(x)
         return final_output, attention_weights # (batch_size, tar_seq_len, output_size), ?
