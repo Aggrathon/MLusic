@@ -4,7 +4,8 @@ from time import time as timer
 import tensorflow as tf
 from keras_radam.training import RAdamOptimizer
 from transformer import DecodingTransformer, look_ahead_mask
-from lpd import read, write, _infer
+from lpd import read, write
+from pianoroll_predict import _infer
 
 SEQUENCE_LENGTH = 512
 BATCH_SIZE = 48

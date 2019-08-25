@@ -3,7 +3,7 @@ import sys
 from time import time as timer
 import tensorflow as tf
 from transformer import Transformer, look_ahead_mask
-from lpd import read, write, _infer
+from lpd import read, write
 
 SEQUENCE_LENGTH = 256
 BATCH_SIZE = 32
