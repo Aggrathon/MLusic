@@ -10,8 +10,8 @@ from keras_radam.training import RAdamOptimizer
 
 
 SEQUENCE_LENGTH = 512
-BATCH_SIZE = 64
-LEARNING_RATE = 1e-5
+BATCH_SIZE = 32
+LEARNING_RATE = 1e-6
 CHECKPOINT_PATH = "./network/pianoroll_predict"
 
 
@@ -20,8 +20,8 @@ def train_step(data, transformer, optimiser):
     mask = look_ahead_mask(tf.shape(data)[1]-1)
     with tf.GradientTape() as tape:
         predictions, _ = transformer(data[:, :-1, :], True, mask)
-        predictions = tf.nn.leaky_relu(predictions, 0.1)
-        loss = tf.keras.losses.mean_squared_error(data[:, 33:, :], predictions[:, 32:, :])
+        # predictions = tf.nn.sigmoid(predictions)
+        loss = tf.keras.losses.binary_crossentropy(data[:, 33:, :], predictions[:, 32:, :], True, 0.05)
     gradients = tape.gradient(loss, transformer.trainable_variables)
     optimiser.apply_gradients(zip(gradients, transformer.trainable_variables))
     return tf.reduce_sum(loss, -1)
@@ -35,7 +35,7 @@ def train():
         print('Loading latest checkpoint')
         checkpoint.restore(manager.latest_checkpoint)
     loss = tf.keras.metrics.Mean(name='loss')
-    data = enumerate(read())
+    data = enumerate(read(SEQUENCE_LENGTH+1, BATCH_SIZE))
     try:
         print("Preparing training")
         next(data)
@@ -47,7 +47,7 @@ def train():
         for i, dat in data:
             loss(train_step(dat, tra, opt))
             if i % 100 == 0:
-                print("Step: {:5d}      Loss: {:6.3f}      Time: {:5.2f}".format(
+                print("Step: {:5d}      Loss: {:6.2f}      Time: {:5.2f}".format(
                     i, loss.result(), timer() - logtime))
                 if chptime < timer():
                     print("Saving checkpoint (%d min)"%int((timer() - starttime)/60))
@@ -56,7 +56,7 @@ def train():
                 loss.reset_states()
                 logtime = timer()
     except KeyboardInterrupt:
-        print("Saving checkpoint")
+        print("Saving checkpoint (%d min)"%int((timer() - starttime)/60))
         manager.save()
 
 
@@ -64,7 +64,7 @@ def train():
 def _infer(data, tra):
     mask = look_ahead_mask(tf.shape(data)[1])
     tmp, _ = tra(data, False, mask)
-    tmp = tf.nn.relu(tmp)[:, -1, :]
+    tmp = tf.nn.sigmoid(tmp)[:, -1, :]
     return tmp
 
 def generate(length=SEQUENCE_LENGTH*2):

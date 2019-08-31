@@ -290,6 +290,7 @@ class DecodingTransformer(tf.keras.Model):
         self.dec_layers = [DecodingLayer(d_model, num_heads, dff, rate, relative) for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)
         self.final_layer = tf.keras.layers.Dense(output_size)
+        self.pos_enc = None
 
     def build(self, input_shape):
         if not self.relative:

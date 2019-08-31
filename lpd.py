@@ -14,8 +14,6 @@ from pypianoroll import Multitrack, Track, load, write as piano_write
 DATA_DIR = Path("input/lpd_cleansed/")
 CONVERTED_DIR = Path("input/lpd_converted")
 OUTPUT_DIR = Path("output")
-SEQUENCE_LENGTH = 512
-BATCH_SIZE = 32
 
 
 def convert(remove_drum=True):
@@ -54,7 +52,7 @@ def read_generator():
             yield file["data"].astype(np.uint8)
             file.close()
 
-def read(sequence=SEQUENCE_LENGTH+1, batch=BATCH_SIZE):
+def read(sequence, batch):
     buffer = 10000 if batch > 1 else 100
     data = tf.data.Dataset.from_generator(read_generator, tf.uint8, (None, 128))
     data = data.unbatch().batch(sequence).shuffle(buffer).batch(batch)
