@@ -52,8 +52,9 @@ def read_generator():
             yield file["data"].astype(np.uint8)
             file.close()
 
-def read(sequence, batch):
-    buffer = 10000 if batch > 1 else 100
+def read(sequence, batch, buffer = -1):
+    if buffer < 1:
+        buffer = 10000 if batch > 1 else 100
     data = tf.data.Dataset.from_generator(read_generator, tf.uint8, (None, 128))
     data = data.unbatch().batch(sequence).shuffle(buffer).batch(batch)
     data = data.map(lambda x: tf.cast(x, tf.float32))
